@@ -1,0 +1,74 @@
+[
+  {
+    "id": "apt-101",
+    "clientName": "Arjun Malhotra",
+    "clientPhone": "919820123456",
+    "serviceName": "Signature Haircut & Beard Sculpt",
+    "stylist": "Amit Sharma",
+    "time": "11:30 AM",
+    "date": "Today",
+    "price": 650,
+    "status": "In-Chair",
+    "notes": "Prefers textured matte finish"
+  },
+  {
+    "id": "apt-102",
+    "clientName": "Rhea Sen",
+    "clientPhone": "919876543210",
+    "serviceName": "Balayage & Global Color",
+    "stylist": "Priya Verma",
+    "time": "12:15 PM",
+    "date": "Today",
+    "price": 4200,
+    "status": "Confirmed",
+    "notes": "Ash blonde consultation done"
+  },
+  {
+    "id": "apt-103",
+    "clientName": "Vikram Singhania",
+    "clientPhone": "919811223344",
+    "serviceName": "Moroccan Hair Spa & Scalp Detox",
+    "stylist": "Sneha Kulkarni",
+    "time": "01:00 PM",
+    "date": "Today",
+    "price": 1450,
+    "status": "Confirmed",
+    "notes": "VIP Client, quiet chair requested"
+  },
+  {
+    "id": "apt-104",
+    "clientName": "Karan Johar",
+    "clientPhone": "919930445566",
+    "serviceName": "Signature Haircut & Beard Sculpt",
+    "stylist": "Rahul Mehta",
+    "time": "02:30 PM",
+    "date": "Today",
+    "price": 650,
+    "status": "Confirmed",
+    "notes": "Skin fade with straight razor line"
+  },
+  {
+    "id": "apt-105",
+    "clientName": "Ananya Roy",
+    "clientPhone": "919840556677",
+    "serviceName": "Keratin Silk Smooth Treatment",
+    "stylist": "Amit Sharma",
+    "time": "03:45 PM",
+    "date": "Today",
+    "price": 3800,
+    "status": "Confirmed",
+    "notes": "Shoulder-length hair"
+  },
+  {
+    "id": "apt-106",
+    "clientName": "Devansh Roy",
+    "clientPhone": "919871122334",
+    "serviceName": "Radiance Gold Facial & De-Tan",
+    "stylist": "Sneha Kulkarni",
+    "time": "10:00 AM",
+    "date": "Today",
+    "price": 1800,
+    "status": "Completed",
+    "notes": "Paid via UPI"
+  }
+]

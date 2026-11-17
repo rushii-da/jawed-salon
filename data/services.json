@@ -1,0 +1,50 @@
+[
+  {
+    "id": "srv-1",
+    "name": "Signature Haircut & Beard Sculpt",
+    "category": "Hair & Grooming",
+    "price": 650,
+    "duration": 45,
+    "popular": true
+  },
+  {
+    "id": "srv-2",
+    "name": "Keratin Silk Smooth Treatment",
+    "category": "Hair Treatment",
+    "price": 3800,
+    "duration": 120,
+    "popular": true
+  },
+  {
+    "id": "srv-3",
+    "name": "Moroccan Hair Spa & Scalp Detox",
+    "category": "Hair Treatment",
+    "price": 1450,
+    "duration": 60,
+    "popular": true
+  },
+  {
+    "id": "srv-4",
+    "name": "Balayage & Global Color",
+    "category": "Hair Color",
+    "price": 4200,
+    "duration": 150,
+    "popular": false
+  },
+  {
+    "id": "srv-5",
+    "name": "Radiance Gold Facial & De-Tan",
+    "category": "Skin & Spa",
+    "price": 1800,
+    "duration": 60,
+    "popular": true
+  },
+  {
+    "id": "srv-6",
+    "name": "Luxury Groom / Bridal Makeover",
+    "category": "Special Occasion",
+    "price": 7500,
+    "duration": 180,
+    "popular": false
+  }
+]
