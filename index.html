@@ -23,7 +23,7 @@ button,input,select{font:inherit;color:inherit}button{cursor:pointer;border:0;ba
 main{min-width:0;display:flex;flex-direction:column;gap:20px;padding-bottom:20px}
 .hd{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}.hd h1{margin:0;font-size:clamp(26px,3.4vw,34px);font-weight:600;letter-spacing:-.02em;line-height:1.1}.hd small{color:var(--muted);font-size:14px}.acts{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
 .srch{display:flex;gap:8px;padding:12px 18px;border-radius:99px;background:var(--card);border:1px solid var(--line);color:var(--muted);font-weight:500;font-size:14px}
-.btn{display:inline-flex;align-items:center;gap:8px;padding:12px 22px;border-radius:99px;background:var(--ink);color:#fff;font-weight:600;font-size:14px;transition:transform .2s var(--ease),box-shadow .2s,background .2s;border:1px solid var(--line)}.btn b{color:var(--lime);font-size:16px}.btn:hover{transform:translateY(-2px);box-shadow:0 10px 22px -12px #14161B}.btn:active{transform:scale(.97)}.btn.w{background:var(--card);color:var(--tx)}.btn.l{background:var(--lime);color:#14161B}.btn.f{width:100%;justify-content:center;padding:15px}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:12px 22px;border-radius:99px;background:var(--ink);color:#fff;font-weight:600;font-size:14px;transition:transform .2s var(--ease),box-shadow .2s,background .2s;border:1px solid var(--line);cursor:pointer}.btn b{color:var(--lime);font-size:16px}.btn:hover{transform:translateY(-2px);box-shadow:0 10px 22px -12px #14161B}.btn:active{transform:scale(.97)}.btn.w{background:var(--card);color:var(--tx)}.btn.l{background:var(--lime);color:#14161B;border-color:transparent}.btn.l b{color:#14161B}.btn.f{width:100%;justify-content:center;padding:15px}
 .btn-wa{display:inline-flex;align-items:center;gap:5px;padding:6px 14px;border-radius:99px;background:#25D366;color:#fff!important;font-weight:600;font-size:12px;text-decoration:none;transition:all .25s var(--ease);border:0;cursor:pointer;box-shadow:0 2px 6px rgba(37,211,102,.25)}
 .btn-wa:hover{background:#20bd5a;transform:scale(1.05);box-shadow:0 4px 12px rgba(37,211,102,.35)}
 .btn-wa svg{width:13px;height:13px;fill:currentColor}
@@ -61,21 +61,19 @@ label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin:16p
 <script>
 const SV={'Haircut & Beard':650,'Keratin Silk Smooth':3800,'Moroccan Hair Spa':1450,'Balayage & Color':4200,'Radiance Gold Facial':1800,'Bridal Makeover':7500};
 const BA=['Amit Sharma','Priya Verma','Rahul Mehta','Sneha Kulkarni'],BC={'Amit Sharma':0,'Priya Verma':1,'Rahul Mehta':2,'Sneha Kulkarni':3};
-const COL=['var(--lime)','var(--violet)','var(--amber)','var(--coral)'],COF=['#14161B','#fff','#14161B','#fff'],ICO={dashboard:'<rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/>',new:'<circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/>',customers:'<circle cx="9" cy="8" r="4"/><path d="M2 21a7 7 0 0 1 14 0"/><path d="M17 4a4 4 0 0 1 0 8M22 21a7 7 0 0 0-4-6"/>',barbers:'<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4 8.1 15.9M14.5 14.5 20 20M8.1 8.1 12 12"/>',campaigns:'<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',reports:'<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>'};
-const NAV=[['dashboard','Dashboard'],['new','New Appointment'],['customers','Clients & Log'],['barbers','Stylists & Team'],['campaigns','WhatsApp Campaigns'],['reports','Revenue Reports']];
+const COL=['var(--lime)','var(--violet)','var(--amber)','var(--coral)'],COF=['#14161B','#fff','#14161B','#fff'],ICO={dashboard:'<rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/>',new:'<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>',customers:'<circle cx="9" cy="8" r="4"/><path d="M2 21a7 7 0 0 1 14 0"/><path d="M17 4a4 4 0 0 1 0 8M22 21a7 7 0 0 0-4-6"/>',barbers:'<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4 8.1 15.9M14.5 14.5 20 20M8.1 8.1 12 12"/>',campaigns:'<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',reports:'<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>'};
+const NAV=[['dashboard','Dashboard'],['new','⚡ Walk-in Billing'],['customers','Clients & Log'],['barbers','Stylists & Team'],['campaigns','WhatsApp Campaigns'],['reports','Revenue Reports']];
 const $=s=>document.querySelector(s),inr=n=>'₹'+Math.round(n).toLocaleString('en-IN'),amt=c=>c.sv.reduce((a,s)=>a+(SV[s]||650),0),sum=a=>a.reduce((x,c)=>x+amt(c),0);
 const av=(s,i,z)=>`<i class="av" style="width:${z||38}px;height:${z||38}px;background:${COL[i%4]};color:${COF[i%4]};font-size:${(z||38)*.38}px">${s[0]}</i>`,chip=(t,c)=>`<span class="chip ${c||''}">${t}</span>`;
 
-// WhatsApp direct confirmation generator
+// WhatsApp function for campaign offers only
 function sendWA(name, phone, srv, barber, price) {
   const p = (phone || '').replace(/\D/g, '');
   const ph = p.length === 10 ? '91' + p : (p.length === 12 && p.startsWith('91') ? p : '91' + p);
-  const s = Array.isArray(srv) ? srv.join(' + ') : (srv || 'Haircut & Styling');
-  const pr = price ? ` Total: ₹${Number(price).toLocaleString('en-IN')}.` : '';
-  const msg = `Hi ${name}! ✨ Your appointment for *${s}* with stylist *${barber}* at *Jawed Salon* is confirmed.${pr} We look forward to pampering you! 💇‍♂️💆‍♀️`;
+  const msg = `Hi ${name}! ✨ Special offer from *Jawed Salon*! Enjoy 20% off on your next visit for *${srv || 'Hair Spa & Styling'}*. Reply to reserve your slot! 💇‍♂️💆‍♀️`;
   const url = `https://wa.me/${ph}?text=${encodeURIComponent(msg)}`;
   window.open(url, '_blank');
-  toast(`WhatsApp confirmation opened for ${name}`);
+  toast(`WhatsApp offer chat opened for ${name}`);
 }
 
 const seed=()=>({today:[
@@ -103,11 +101,12 @@ let IL=0,P=(location.hash||'#dashboard').slice(1),F='All',CA=0,sel=new Set(),pay
 const R=' data-rise';
 
 function toast(t){const e=$('#toast');e.textContent=t;e.classList.add('show');clearTimeout(toast.t);toast.t=setTimeout(()=>e.classList.remove('show'),2600)}
-const NC=`<a class="btn" href="#new" onclick="go('new');return false"><b>+</b> New Appointment</a>`,NB=(t,p)=>`<button class="btn" onclick="toast('${t} (demo)')">${p?'<b>+</b> ':''}${t}</button>`;
+const NC=`<button class="btn l" onclick="go('new')"><b>⚡</b> Walk-in Billing</button>`;
+const NB=(t,p)=>`<button class="btn" onclick="toast('${t} (demo)')">${p?'<b>+</b> ':''}${t}</button>`;
 const TG=`<button class="tgl" aria-label="Switch between light and dark theme" onclick="toggleTheme()"><i class="knob"></i><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg><svg viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></button>`;
 
 function toggleTheme(){const r=document.documentElement,n=r.dataset.theme==="dark"?"light":"dark";r.classList.add("tt");r.dataset.theme=n;try{localStorage.setItem("glow-theme",n)}catch(e){}setTimeout(()=>r.classList.remove("tt"),550)}
-function head(t,sub,r,bt){const d=new Date().toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short'});return`<div class="hd"${R}><div><h1>${t}</h1><small>${sub||d}</small></div><div class="acts">${TG}${r===0?'':r||`<div class="srch">🔍 Search client or phone</div>`}${bt===undefined?NC:bt}</div></div>`}
+function head(t,sub,r,bt){const d=new Date().toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short'});return`<div class="hd"${R}><div><h1>${t}</h1><small>${sub||d}</small></div><div class="acts">${TG}${r===0?'':r||`<button class="btn l" onclick="go('new')"><b>⚡</b> Walk-in Billing</button>`}${bt===undefined?NC:bt}</div></div>`}
 function stat(l,v,s,th,n){return`<div class="card ${th||''}"${R}><div class="${th?'':'mut'}" style="${th?'opacity:.75':''};font-size:14px;font-weight:500">${l}</div><div class="big md" style="margin:8px 0 12px"${n!=null?` data-n="${n}" data-f="${v}"`:''}>${n!=null?'':v}</div>${chip(s,th==='ink'?'lime':th==='vio'?'wh':th==='lime'?'dk':'')}</div>`}
 
 // ---------- DASHBOARD ----------
@@ -115,23 +114,31 @@ function dash(){const T=st.today,tot=sum(T),pm=['Card','UPI','Cash'].map((k,i)=>
 const bs=BA.map(b=>{const x=T.filter(c=>c.b===b),r=x.filter(c=>c.r);return{b,n:x.length,v:sum(x),r:r.length?(r.reduce((a,c)=>a+c.r,0)/r.length).toFixed(1):'–'}}).sort((a,b)=>b.v-a.v),mx=Math.max(...bs.map(x=>x.v),1);
 const WV=[['Thu',14200],['Fri',18100],['Sat',29800],['Sun',34400],['Mon',12300],['Tue',15900],['Today',tot]],wm=Math.max(...WV.map(x=>x[1])),lap=st.crm.filter(c=>c.d>=30),h=new Date().getHours();let off=0;
 const arcs=pm.map(p=>{const len=tot?p.v/tot*289:0,o=off;off+=len;return`<circle class="arc" cx="60" cy="60" r="46" style="stroke:${p.c};stroke-dasharray:${len} 289;stroke-dashoffset:${-o}"/>`}).join('');
-return head(h<12?'Good morning, Jawed Team':h<17?'Good afternoon, Jawed Team':'Good evening, Jawed Team','MG Road Branch · Operating Live')+`<div class="g r1" style="grid-template-rows:auto">
-<div class="card ink" style="display:flex;flex-direction:column;gap:14px;min-height:340px"${R}><div style="display:flex;justify-content:space-between">${chip('Today’s Collection','wh')}${chip('+22% vs last '+new Date().toLocaleDateString('en-IN',{weekday:'short'}),'lime')}</div><div class="big lg" data-n="${tot}" data-f="inr"></div><div class="dim" style="font-size:14px">${T.length} appointments · average ticket ${inr(tot/Math.max(T.length,1))}</div><div class="bars">${WV.map(([l,v],i)=>`<div class="${i===6?'t':''}" style="--i:${i}"><u style="height:${Math.max(v/wm*100,8)}%"></u>${l}</div>`).join('')}</div></div>
+return head(h<12?'Good morning, Jawed Team':h<17?'Good afternoon, Jawed Team':'Good evening, Jawed Team','MG Road Branch · Counter Live',`<button class="btn l" onclick="go('new')"><b>⚡</b> Walk-in Billing</button>`,NC)+`<div class="g r1" style="grid-template-rows:auto">
+<div class="card ink" style="display:flex;flex-direction:column;gap:14px;min-height:340px"${R}><div style="display:flex;justify-content:space-between">${chip('Today’s Collection','wh')}${chip('+22% vs last '+new Date().toLocaleDateString('en-IN',{weekday:'short'}),'lime')}</div><div class="big lg" data-n="${tot}" data-f="inr"></div><div class="dim" style="font-size:14px">${T.length} walk-ins settled · average ticket ${inr(tot/Math.max(T.length,1))}</div><div class="bars">${WV.map(([l,v],i)=>`<div class="${i===6?'t':''}" style="--i:${i}"><u style="height:${Math.max(v/wm*100,8)}%"></u>${l}</div>`).join('')}</div></div>
 <div class="card"${R}><h3>Payment Split</h3><div class="donut"><svg viewBox="0 0 120 120">${arcs}</svg><div><b class="big">${T.length}</b><small>bills</small></div></div>${pm.map(p=>`<div class="leg"><i style="background:${p.c}"></i>${p.k}<b>${inr(p.v)}</b><span>${tot?Math.round(p.v/tot*100):0}%</span></div>`).join('')}</div>
 <div class="k2">${stat('Clients Today',T.length,rep+' returning · '+Math.round(rep/Math.max(T.length,1)*100)+'%','vio',T.length)}<div class="card"${R}><div class="mut" style="font-size:14px;font-weight:500">Salon Rating</div><div class="big md" style="margin:8px 0 12px">${avg} ★</div>${chip('Google 4.9 Verified','lime')}</div></div></div>
-<div class="g r2"><div class="card"${R}><h3>Stylist Performance ${chip('Today')}</h3>${bs.map((x,i)=>`<div style="margin-bottom:18px"><div class="ln">${av(x.b,BC[x.b]||0,40)}<div class="gr"><b>${x.b}</b><small>${x.n} appointments · ${x.r} ★</small></div><b style="font-size:16px" data-n="${x.v}" data-f="inr"></b></div><div class="trk"><i style="--i:${i};width:${x.v/mx*100}%;background:${COL[BC[x.b]||0]}"></i></div></div>`).join('')}<div style="background:var(--soft);border-radius:20px;padding:14px;font-size:13px"><small class="mut" style="font-weight:600;display:block">Top Producer</small>${bs[0].b} drives ${tot?Math.round(bs[0].v/tot*100):0}% of today’s salon revenue.</div></div>
-<div class="card"${R}><h3>Today’s Queue <a class="mut" href="#customers" onclick="go('customers');return false" style="font-size:13px">View all</a></h3>${[...T].reverse().slice(0,5).map((c,i)=>`<div class="row" style="animation:rise .6s var(--ease) both;animation-delay:${.35+i*.06}s">${av(c.n,c.m==='UPI'?1:c.m==='Cash'?2:0,38)}<div class="gr"><b>${c.n}</b><small>${c.sv.join(' + ')} · ${c.b}</small></div><button class="btn-wa" onclick="sendWA('${c.n}','${c.p}','${c.sv.join(' + ')}','${c.b}',${amt(c)})">📲 WA</button><div style="text-align:right"><b>${inr(amt(c))}</b><br>${chip(c.m,c.m==='UPI'?'vio':c.m==='Cash'?'amb':'')}</div></div>`).join('')}</div>
-<div class="card lime" style="display:flex;flex-direction:column;gap:14px"${R}>${chip('Client Retention','dk')}<div class="big lg" data-n="${lap.length}"></div><div style="font-weight:500">VIP clients haven’t visited in 30+ days</div><div class="bub">Hi ${lap[0]?lap[0].n.split(' ')[0]:'there'}, we miss you at Jawed Salon! Enjoy 20% off your Hair Spa this week.</div><div class="sp"></div><a class="btn f" href="#campaigns" onclick="go('campaigns');return false">Broadcast to ${lap.length} clients on WhatsApp</a><small style="opacity:.6;text-align:center">Instant WhatsApp Deep Link Integration</small></div></div>`}
+<div class="g r2"><div class="card"${R}><h3>Stylist Performance ${chip('Today')}</h3>${bs.map((x,i)=>`<div style="margin-bottom:18px"><div class="ln">${av(x.b,BC[x.b]||0,40)}<div class="gr"><b>${x.b}</b><small>${x.n} clients billed · ${x.r} ★</small></div><b style="font-size:16px" data-n="${x.v}" data-f="inr"></b></div><div class="trk"><i style="--i:${i};width:${x.v/mx*100}%;background:${COL[BC[x.b]||0]}"></i></div></div>`).join('')}<div style="background:var(--soft);border-radius:20px;padding:14px;font-size:13px"><small class="mut" style="font-weight:600;display:block">Top Producer</small>${bs[0].b} drives ${tot?Math.round(bs[0].v/tot*100):0}% of today’s salon revenue.</div></div>
+<div class="card"${R}><h3>Today’s Billed Log <a class="mut" href="#customers" onclick="go('customers');return false" style="font-size:13px">View all</a></h3>${[...T].reverse().slice(0,5).map((c,i)=>`<div class="row" style="animation:rise .6s var(--ease) both;animation-delay:${.35+i*.06}s">${av(c.n,c.m==='UPI'?1:c.m==='Cash'?2:0,38)}<div class="gr"><b>${c.n}</b><small>${c.sv.join(' + ')} · ${c.b}</small></div><div style="text-align:right"><b>${inr(amt(c))}</b><br>${chip(c.m,c.m==='UPI'?'vio':c.m==='Cash'?'amb':'')}</div></div>`).join('')}</div>
+<div class="card lime" style="display:flex;flex-direction:column;gap:14px"${R}>${chip('Client Retention','dk')}<div class="big lg" data-n="${lap.length}"></div><div style="font-weight:500">VIP clients haven’t visited in 30+ days</div><div class="bub">Hi ${lap[0]?lap[0].n.split(' ')[0]:'there'}, we miss you at Jawed Salon! Enjoy 20% off your Hair Spa this week.</div><div class="sp"></div><a class="btn f" href="#campaigns" onclick="go('campaigns');return false">Broadcast to ${lap.length} clients on WhatsApp</a><small style="opacity:.6;text-align:center">Broadcast offers to opted-in clients only</small></div></div>`}
 
-// ---------- NEW APPOINTMENT ----------
-function newc(){return head('New Appointment','Instant Booking & WhatsApp Confirmation',`<div class="srch">⚡ Fast Check-in</div>`,'')+`<div class="g c2"><div class="card"${R}><h3>Client & Service Details</h3><label>Client Name</label><input class="in" id="fn" placeholder="e.g. Rahul Sharma" autocomplete="off"><label>10-Digit WhatsApp Mobile</label><input class="in" id="fp" inputmode="numeric" maxlength="10" placeholder="e.g. 9820123456" autocomplete="off"><label>Select Salon Services</label><div class="chips" id="cs">${Object.keys(SV).map(k=>`<button class="sv" data-s="${k}">${k} · ${inr(SV[k])}</button>`).join('')}</div><label>Stylist / Specialist</label><div class="chips" id="cb">${BA.map((b,i)=>`<button class="sv ${i?'':'on'}" data-b="${b}">${b}</button>`).join('')}</div><label>Payment Mode</label><div class="chips" id="cp">${['UPI','Card','Cash'].map((m,i)=>`<button class="sv ${i===0?'on':''}" data-m="${m}">${m}</button>`).join('')}</div><label style="display:flex;gap:10px;align-items:center;margin-top:20px"><input type="checkbox" id="fc" checked> Send 1-Click WhatsApp Booking Confirmation</label></div>
-<div class="card ink" style="display:flex;flex-direction:column;gap:12px"${R}><div class="dim" style="font-weight:500">Total Booking Value</div><div class="big lg" id="tt">₹0</div><div class="dim" style="font-size:13px">Saving this appointment immediately records the booking in the JSON database and launches WhatsApp with a branded confirmation message.</div><div class="sp"></div><button class="btn l f" id="sv2">Book &amp; Send WhatsApp Confirmation 📲</button></div></div>`}
+// ---------- WALK-IN BILLING ----------
+function newc(){
+  const backBtn = `<button class="btn w" onclick="go('dashboard')">← Back to Dashboard</button>`;
+  return head('⚡ Walk-in Counter Billing','Fast checkout & immediate payment settlement',0,backBtn)+`<div class="g c2"><div class="card"${R}><h3>Customer & Service Details</h3>
+<label>Customer Name</label><input class="in" id="fn" placeholder="e.g. Rahul Sharma (or Walk-in)" autocomplete="off">
+<label>10-Digit Mobile Number (for visit history)</label><input class="in" id="fp" inputmode="numeric" maxlength="10" placeholder="e.g. 9820123456" autocomplete="off">
+<label>Services Completed</label><div class="chips" id="cs">${Object.keys(SV).map(k=>`<button class="sv" data-s="${k}">${k} · ${inr(SV[k])}</button>`).join('')}</div>
+<label>Stylist Who Provided Service</label><div class="chips" id="cb">${BA.map((b,i)=>`<button class="sv ${i?'':'on'}" data-b="${b}">${b}</button>`).join('')}</div>
+<label>Payment Collected Via</label><div class="chips" id="cp">${['UPI','Cash','Card'].map((m,i)=>`<button class="sv ${i===0?'on':''}" data-m="${m}">${m}</button>`).join('')}</div>
+</div>
+<div class="card ink" style="display:flex;flex-direction:column;gap:14px"${R}><div class="dim" style="font-weight:500">Total Amount Due</div><div class="big lg" id="tt">₹0</div><div class="dim" style="font-size:13px">Saving this bill records the transaction directly into the SQLite database, updates stylist commissions, and credits today's gross collection.</div><div class="sp"></div><button class="btn l f" id="sv2" style="font-size:15px;font-weight:700">💾 Complete & Settle Bill</button></div></div>`}
 
 // ---------- CLIENTS & LOG ----------
 function cust(){const L=st.crm,fl=L.filter(c=>F==='All'||(F==='At risk'?c.d>=30:c.t===F)),cn=k=>k==='All'?148+st.added:k==='At risk'?6:{Returning:92,New:21+st.added,VIP:12}[k],lap=L.filter(c=>c.d>=30).length,sc={VIP:'lime',Returning:'vio',New:'amb','At risk':'coral'};
-return head('Clients & Appointments',`${148+st.added} client records · 64% 30-day retention`)+`<div class="g c4">${stat('Total Clients',148+st.added,'+'+(21+st.added)+' this week','',148+st.added)}${stat('Repeat Rate','64%','↑ 6% vs last month','vio')}${stat('Avg. Ticket','₹1,450','per visit')}${stat('Due for Visit',lap,'Send WhatsApp alert','lime',lap)}</div>
+return head('Clients & Visit History',`${148+st.added} client records · 64% 30-day retention`)+`<div class="g c4">${stat('Total Clients',148+st.added,'+'+(21+st.added)+' this week','',148+st.added)}${stat('Repeat Rate','64%','↑ 6% vs last month','vio')}${stat('Avg. Ticket','₹1,450','per visit')}${stat('Due for Visit',lap,'Send WhatsApp offer','lime',lap)}</div>
 <div class="pills"${R}>${['All','Returning','New','VIP','At risk'].map(k=>`<button class="pill ${F===k?'on':''}" onclick="F='${k}';render()">${k} ${cn(k)}</button>`).join('')}<span class="mut" style="margin-left:auto;font-size:13px;font-weight:600">Sort: Recent Visit ↓</span></div>
-<div class="card tw"${R}><table><thead><tr><th>Client</th><th>Mobile</th><th>Last Visit</th><th>Visits</th><th>Total Spend</th><th>Preferred Stylist</th><th>Rating</th><th>Tier</th><th>Action</th></tr></thead><tbody>${fl.map((c,i)=>`<tr style="--i:${i}"><td><div class="ln">${av(c.n,i,36)}<div class="gr"><b>${c.n}</b><small>${c.u}</small></div></div></td><td>${c.p}</td><td ${c.d>=30?'style="color:var(--coral)"':''}>${c.d===0?'Today':c.d===1?'Yesterday':c.d+' days ago'}</td><td><b>${c.v}</b></td><td><b>${inr(c.s)}</b></td><td>${c.b}</td><td><b>★ ${c.r}</b></td><td>${chip(c.t,sc[c.t])}</td><td><button class="btn-wa" onclick="sendWA('${c.n}','${c.p}','${c.u}','${c.b}',${c.s})">📲 WhatsApp</button></td></tr>`).join('')}</tbody></table><div class="mut" style="font-size:13px;padding-top:14px">Showing ${fl.length} of ${148+st.added} active records</div></div>`}
+<div class="card tw"${R}><table><thead><tr><th>Client</th><th>Mobile</th><th>Last Visit</th><th>Visits</th><th>Total Spend</th><th>Preferred Stylist</th><th>Rating</th><th>Tier</th><th>Offer</th></tr></thead><tbody>${fl.map((c,i)=>`<tr style="--i:${i}"><td><div class="ln">${av(c.n,i,36)}<div class="gr"><b>${c.n}</b><small>${c.u}</small></div></div></td><td>${c.p}</td><td ${c.d>=30?'style="color:var(--coral)"':''}>${c.d===0?'Today':c.d===1?'Yesterday':c.d+' days ago'}</td><td><b>${c.v}</b></td><td><b>${inr(c.s)}</b></td><td>${c.b}</td><td><b>★ ${c.r}</b></td><td>${chip(c.t,sc[c.t])}</td><td><button class="btn-wa" onclick="sendWA('${c.n}','${c.p}','${c.u}')">📲 Send Offer</button></td></tr>`).join('')}</tbody></table><div class="mut" style="font-size:13px;padding-top:14px">Showing ${fl.length} of ${148+st.added} active records</div></div>`}
 
 // ---------- STYLISTS & TEAM ----------
 function barb(){const B=[['Amit Sharma','Creative Hair Director',0,'4.9','138','₹2,42,400','₹1,756','78%','35%','₹84,840',[40,52,36,58,62,48,56]],['Priya Verma','Master Colorist',1,'4.95','112','₹3,18,000','₹2,839','82%','35%','₹1,11,300',[30,28,34,26,38,32,36]],['Rahul Mehta','Beard & Fade Specialist',2,'4.85','144','₹1,15,500','₹802','64%','30%','₹34,650',[28,32,26,34,30,36,32]],['Sneha Kulkarni','Spa & Aesthetician Lead',3,'4.9','88','₹1,84,000','₹2,090','74%','35%','₹64,400',[18,22,16,24,20,26,22]]],W=[[35,24,18],[42,28,22],[48,34,26],[52,38,30]];
@@ -139,7 +146,7 @@ return head('Stylists & Specialists','4 team members · MG Road Lounge',`<div cl
 
 // ---------- WHATSAPP CAMPAIGNS ----------
 const AUD=()=>{const lap=st.crm.filter(c=>c.d>=30);return[['Lapsed 30+ days',lap.length,`Hi ${lap[0]?lap[0].n.split(' ')[0]:'there'}, we miss you at Jawed Salon! Enjoy 20% off your next Hair Spa & Scalp Detox this week. Show this to book your chair.`],['All Clients',148+st.added,'Hi Aarav, weekend special at Jawed Salon: Signature Cut + Beard Sculpt for just ₹599. Reply to reserve your slot!'],['VIP Lounge',12,'Hi Neha, thank you for being a Jawed Salon VIP! Enjoy a complimentary Moroccan scalp massage with any service this week.']]};
-function camp(){const A=AUD();return head('WhatsApp Marketing','Direct broadcast with zero spam penalty',0,NB('Create Campaign',1))+`<div class="g c4">${stat('Broadcasts Sent','2,450','This month')}${stat('Open Rate','91%','↑ 8% vs SMS','vio')}${stat('Direct Bookings','124','5.1% conversion')}${stat('Revenue Recovered','₹84,600','This month','ink')}</div>
+function camp(){const A=AUD();return head('WhatsApp Marketing & Offers','Send festival discounts and win-back offers to clients',0,NB('Create Campaign',1))+`<div class="g c4">${stat('Broadcasts Sent','2,450','This month')}${stat('Open Rate','91%','↑ 8% vs SMS','vio')}${stat('Direct Bookings','124','5.1% conversion')}${stat('Revenue Recovered','₹84,600','This month','ink')}</div>
 <div class="g c2"><div style="display:grid;gap:20px;align-content:start"><div class="g c3">${[['Win-back','We miss you — 20% off','6 VIPs · 30+ days inactive','lime',0],['Festive','Diwali Glow Combo','148 clients opted-in','ink',1],['Birthday','Birthday Pamper Treat','4 birthdays this week','',2]].map(t=>`<div class="card ${t[3]}" style="display:flex;flex-direction:column;gap:10px"${R}>${chip(t[0],t[3]==='lime'?'dk':t[3]==='ink'?'wh':'')}<b style="font-size:18px;line-height:1.2">${t[1]}</b><small style="opacity:.65">${t[2]}</small><div class="sp"></div><button class="btn ${t[3]==='ink'?'l':''}" style="justify-content:center;" onclick="CA=${Math.min(t[4],2)};render();toast('Template loaded in composer')">Use template</button></div>`).join('')}</div>
 <div class="card tw"${R}><h3>Recent WhatsApp Broadcasts <span class="mut" style="font-size:13px">View all</span></h3><table style="min-width:600px"><thead><tr><th>Campaign</th><th>Audience</th><th>Delivered</th><th>Read</th><th>Booked</th><th>Revenue</th><th>Status</th></tr></thead><tbody>${[['Diwali Glow Package','All Clients','148','94%','28','₹42,000','Completed'],['We miss you — 20% off','Lapsed 30+ days','11','91%','5','₹8,500','Completed'],['Birthday Pamper','Birthdays','9','100%','6','₹7,200','Completed'],['Balayage Hair Event','VIP Clients','12','95%','4','₹16,800','Completed']].map((r,i)=>`<tr style="--i:${i}"><td><b>${r[0]}</b></td><td class="mut">${r[1]}</td><td><b>${r[2]}</b></td><td>${r[3]}</td><td><b>${r[4]}</b></td><td><b>${r[5]}</b></td><td>${chip(r[6],r[6]==='Completed'?'lime':'amb')}</td></tr>`).join('')}</tbody></table></div></div>
 <div class="card"${R}><h3>WhatsApp Message Preview ${chip('Ready')}</h3><label style="margin-top:0">Audience</label><div class="pills">${A.map((a,i)=>`<button class="pill ${CA===i?'on':''}" onclick="CA=${i};render()">${a[0]} · ${a[1]}</button>`).join('')}</div><label>Live WhatsApp Preview</label><div style="background:var(--soft);border-radius:24px;padding:16px"><div class="ln" style="margin-bottom:10px">${av('J',2,28)}<div class="gr"><b style="font-size:13px">Jawed Salon (Verified)</b><small>Official Business Account</small></div></div><div class="bub" id="bub">${A[CA][2]}<div style="font-size:10px;color:#858B99;margin-top:4px">11:00 AM ✓✓</div></div></div><label>Schedule</label><div class="seg" style="width:max-content"><button>Broadcast Now</button><button class="on">Tomorrow, 10:00 AM</button></div><div class="row" style="margin-top:16px;justify-content:space-between"><small class="mut">Projected Revenue</small><b style="font-size:13px">6-10 Bookings · ₹12,000+</b></div><button class="btn f" onclick="toast('Broadcast dispatched to ${A[CA][1]} clients!')">Broadcast on WhatsApp</button></div></div>`}
@@ -174,36 +181,37 @@ document.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)r
 if(b.dataset.s){sel.has(b.dataset.s)?sel.delete(b.dataset.s):sel.add(b.dataset.s);b.classList.toggle('on');upd()}
 if(b.dataset.b||b.dataset.m){const g=b.parentElement;g.querySelectorAll('.sv').forEach(x=>x.classList.toggle('on',x===b));if(b.dataset.m)payM=b.dataset.m}
 if(b.id==='sv2'){
-  const n=$('#fn').value.trim(),p=$('#fp').value.replace(/\D/g,'');
-  if(n.length<2||p.length!==10||!sel.size)return toast('Please enter client name, 10-digit mobile, and at least 1 service');
-  const bar=document.querySelector('#cb .on').dataset.b,ph=p.slice(0,5)+' '+p.slice(5);
+  const n=$('#fn').value.trim() || 'Walk-in Guest';
+  const p=$('#fp').value.replace(/\D/g,'') || '9800000000';
+  if(!sel.size) return toast('Please select at least 1 completed service');
+  const bar=document.querySelector('#cb .on')?.dataset.b || BA[0];
+  const ph=p.length===10?p.slice(0,5)+' '+p.slice(5):p;
   const totalBill=[...sel].reduce((a,s)=>a+(SV[s]||650),0);
   
-  // 1. Save to state & local database
-  st.today.push({n,p:ph,sv:[...sel],b:bar,m:payM,r:null});
+  // 1. Save to state & local database with status 'Completed'
+  st.today.push({n,p:ph,sv:[...sel],b:bar,m:payM,r:5,status:'Completed',id:'apt-'+Date.now().toString().slice(-6)});
   const a=st.today[st.today.length-1],x=st.crm.find(c=>c.p===ph);
-  if(x){x.v++;x.s+=amt(a);x.d=0;x.b=bar}else{st.crm.unshift({n,p:ph,d:0,v:1,s:amt(a),b:bar,r:'–',t:'New',u:a.sv.join(' + ')});st.added++}
+  if(x){x.v++;x.s+=amt(a);x.d=0;x.b=bar}else{st.crm.unshift({n,p:ph,d:0,v:1,s:amt(a),b:bar,r:5,t:'New',u:a.sv.join(' + ')});st.added++}
   save();
 
-  // 2. Persist to REST backend
+  // 2. Persist to SQLite backend
   fetch('/api/appointments', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       clientName: n,
-      clientPhone: '91' + p,
+      clientPhone: p,
       serviceName: [...sel].join(' + '),
       stylist: bar,
       price: totalBill,
-      status: 'Confirmed'
+      paymentMode: payM,
+      status: 'Completed'
     })
   }).catch(()=>{});
 
-  // 3. Launch 1-Click WhatsApp confirmation
-  sendWA(n, p, [...sel], bar, totalBill);
-
+  // Reset form selection
   sel=new Set();payM='UPI';
-  toast('Appointment Booked & WhatsApp Confirmation Sent ✓');
+  toast(`✓ Bill Settled: ${inr(totalBill)} collected via ${payM}`);
   P='dashboard';history.replaceState(null,'','#dashboard');render();
 }});
 
