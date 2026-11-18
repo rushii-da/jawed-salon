@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: jawed-salon
+    runtime: node
+    branch: main
+    buildCommand: ""
+    startCommand: node server.js
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: 22.14.0
+    # Recommended for production SQLite persistence (requires Render Starter plan or higher):
+    # disk:
+    #   name: jawed-salon-data
+    #   mountPath: /var/data
+    #   sizeGB: 1
+    # Then add envVar:
+    #   - key: DB_PATH
+    #     value: /var/data/salon.db

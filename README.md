@@ -1,32 +1,29 @@
-# Jawed Salon · Owner Operating System
+# Jawed Salon · Owner Operating System (v2.0)
 
-Full-featured Salon Owner Management Dashboard & Booking Engine with native SQLite persistence and 1-Click WhatsApp Client Confirmation.
+Full-stack Salon Management Dashboard, Counter POS Billing, Advance Scheduling, Client 360° CRM, and Indian GST Audit Engine powered by **Node 22+ `node:sqlite`** with zero external runtime dependencies.
 
-## Features
-- **Real-Time Revenue & Metrics**: Live daily earnings, ticket size, footfall, and payment splits in ₹ INR.
-- **1-Click WhatsApp Confirmation**: Sends branded, pre-formatted appointment confirmations directly to client's WhatsApp.
-- **Native SQLite Persistence**: Powered by Node 22+ `node:sqlite` with WAL mode and zero external dependencies.
-- **Stylist Performance & Commissions**: Track appointments, average ticket size, and commission per stylist.
-- **Client Retention / Win-back Engine**: Highlights inactive VIP clients and drafts WhatsApp re-engagement broadcasts.
+## Key Capabilities
+- **Single Source of Truth (SQLite WAL):** All KPIs, 7-day/14-day charts, stylist commissions, payment splits, and retention tiers are computed live from SQLite (`data/salon.db`).
+- **Hardened Security:** Static files served strictly from `public/` (never exposing backend files or `salon.db`), security headers (`X-Content-Type-Options`, `X-Frame-Options`), optional Owner PIN protection, dev-only `/api/reset`, and XSS-escaped event-delegated UI.
+- **Counter POS & Indian GST:** Auto-lookup returning clients by 10-digit phone, discounts, Split payments (UPI + Cash), CGST/SGST breakdown, SAC `999722`, 80mm thermal print styling, and 1-click WhatsApp e-bill.
+- **Live Chair Queue & Double-Booking Guard:** Track `Scheduled → Confirmed → In-Chair → Completed`, reschedule or cancel slots, and prevent stylist time-slot collisions (`409 Conflict`).
+- **Client 360° Profile & Opt-In WhatsApp Queue:** Store hair color formula/allergy notes, manage opt-in consent, and dispatch personalized offers via a logged 1-click WhatsApp queue.
+- **Revenue Reports & GST CSV Export:** Switch `Day | Week | Month`, reconcile End-of-Day Cash Drawer (`Opening Float + Cash Sales`), and download Tally-ready GST CSV exports.
 
 ## Local Development
 ```bash
 node server.js
 ```
-Open [http://localhost:3000](http://localhost:3000)
+Open [http://localhost:3000](http://localhost:3000).
 
-## Run Tests
+## Run Automated Tests
+Runs isolated `node:test` + `node:assert/strict` suites against a temporary SQLite database (never mutating `data/salon.db`):
 ```bash
 npm test
 ```
 
-## Deployment on Render.com (Recommended)
-1. Push this repository to GitHub.
-2. In [Render Dashboard](https://dashboard.render.com), click **New + ➔ Web Service**.
-3. Connect your GitHub repository.
-4. Settings:
-   - **Environment**: `Node`
-   - **Build Command**: *(leave empty)*
-   - **Start Command**: `node server.js`
-   - **Auto-Deploy**: `Yes`
-5. Click **Create Web Service**. Your app will be live with free HTTPS SSL in ~60 seconds!
+## Cloud Deployment Notes
+Because this app uses SQLite (`data/salon.db`), deploy on a platform with a **Persistent Volume** (e.g., Render Web Service + Persistent Disk, Railway Volume, or Fly.io Volume) and set:
+- `NODE_ENV=production` (disables `/api/reset`)
+- `ALLOWED_ORIGIN=https://your-salon-domain.com` (if hosting API cross-origin)
+- Start Command: `node server.js`

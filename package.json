@@ -1,19 +1,21 @@
 {
   "name": "jawed-salon",
-  "version": "1.0.0",
-  "description": "Jawed Salon Owner Operating System with SQLite Database & WhatsApp Confirmation",
+  "version": "2.0.0",
+  "description": "Jawed Salon Owner Operating System with Native SQLite Persistence, Indian GST Invoicing & WhatsApp Queue",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node test_sqlite_api.js"
+    "test": "node --test tests/api.test.js tests/ui.test.js"
   },
   "engines": {
     "node": ">=22.5.0"
   },
   "keywords": [
     "salon",
+    "pos",
     "dashboard",
     "sqlite",
+    "gst",
     "whatsapp"
   ],
   "license": "MIT"
