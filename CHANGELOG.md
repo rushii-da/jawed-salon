@@ -17,5 +17,5 @@
 - Added Live Chair Queue (`Scheduled -> Confirmed -> In-Chair -> Completed`, Reschedule, Cancel), Walk-in Counter Billing with 10-digit phone auto-lookup, discounts, Split UPI+Cash payments, Indian CGST/SGST tax breakdown, and 80mm thermal print styling.
 - Added Client 360° slide-over drawer with visit history, editable hair color/formula notes, and WhatsApp opt-in controls.
 - Wired `Today | Week | Month` Stylist & `Day | Week | Month` Revenue Reports toggles, End-of-Day Cash Drawer reconciliation, downloadable GST CSV export, Services & Stylists CRUD, and a logged 1-click WhatsApp opt-in queue.
-- Upgraded UI with frosted Glassmorphism tokens (Light & Dark), restrained route/period-only motion for panels, charts, and KPI digits, mobile bottom navigation, and full `prefers-reduced-motion` support.
+- Upgraded UI with frosted Glassmorphism tokens (Light & Dark), restrained route/period-only motion for panels, charts, and KPI digits, mobile bottom navigation, inline SVG favicon, singular/plural UI labels, and full `prefers-reduced-motion` support.
 - Upgraded deployment readiness with `render.yaml`, `.node-version` (`22.14.0`), `CLAUDE.md` deploy configuration, and isolated `node:test` + `node:assert/strict` suites.
