@@ -359,7 +359,7 @@ function renderDashboardView() {
       <div class="card">
         <div class="mut" style="font-size:13.5px;font-weight:600">Today’s Rating</div>
         <div class="big md" style="margin:8px 0 12px">${d.avgRating ?? '–'} ${STAR_SVG}</div>
-        ${chip(`${d.activeQueue.filter(a => a.status === 'In-Chair').length} chairs active right now`, 'lime')}
+        ${(() => { const activeChairs = d.activeQueue.filter(a => a.status === 'In-Chair').length; return chip(`${activeChairs} ${activeChairs === 1 ? 'chair' : 'chairs'} active right now`, 'lime'); })()}
       </div>
     </div>
   </div>
@@ -410,7 +410,7 @@ function renderDashboardView() {
             ${av(x.name, idx, 38)}
             <div class="gr">
               <b>${escapeHtml(x.name)}</b>
-              <small>${x.clients_served} bills · ${x.live_rating} ${STAR_SVG}</small>
+              <small>${x.clients_served} ${x.clients_served === 1 ? 'bill' : 'bills'} · ${x.live_rating} ${STAR_SVG}</small>
             </div>
             <b class="tab-num" style="font-size:15px">${inr(x.revenue)}</b>
           </div>
