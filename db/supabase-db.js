@@ -563,16 +563,26 @@ class SupabaseSalonDatabase {
 
   async nextInvoiceNo(salonId) {
     const year = new Date().getFullYear();
-    const { count } = await this.client
+    const prefix = `INV-${year}-`;
+    const { data } = await this.client
       .from('appointments')
-      .select('*', { count: 'exact', head: true })
-      .eq('salon_id', salonId);
+      .select('invoice_no')
+      .eq('salon_id', salonId)
+      .like('invoice_no', `${prefix}%`)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-    let seq = (count || 0) + 101;
-    let candidate = `INV-${year}-${seq}`;
+    let seq = 101;
+    if (data && data.invoice_no) {
+      const match = data.invoice_no.match(/INV-\d+-(\d+)/);
+      if (match) seq = parseInt(match[1], 10) + 1;
+    }
+
+    let candidate = `${prefix}${seq}`;
     while (await this.client.from('appointments').select('id').eq('salon_id', salonId).eq('invoice_no', candidate).maybeSingle().then(r => r.data)) {
       seq += 1;
-      candidate = `INV-${year}-${seq}`;
+      candidate = `${prefix}${seq}`;
     }
     return candidate;
   }
