@@ -1,4 +1,7 @@
-import { api, setSessionOwnerPin, getSessionOwnerPin } from './api.js';
+import {
+  api, setSessionOwnerPin, getSessionOwnerPin,
+  setSalonSession, getSalonSession, clearSalonSession, isSalonLoggedIn
+} from './api.js';
 import {
   COL, ICO, WA_SVG, STAR_SVG,
   escapeHtml, inr, normalizePhone, formatPhone, todayIso, formatDisplayDate,
@@ -203,15 +206,18 @@ function renderSidebar() {
     </nav>
     <div class="sp"></div>
     <div class="tip">
-      <small>Live SQLite Persistence</small>
-      Top revenue driver: <b>${escapeHtml(topService)}</b>. All bills sync directly to SQLite.
+      <small>Live Cloud Persistence</small>
+      Top revenue driver: <b>${escapeHtml(topService)}</b>. All records sync to Supabase.
     </div>
-    <div class="me">
-      <i class="av" aria-hidden="true" style="width:36px;height:36px;background:var(--amber);color:#fff">${escapeHtml((s.salon_name || 'J')[0].toUpperCase())}</i>
-      <div style="min-width:0">
-        <b>${escapeHtml(s.salon_name || 'Jawed Salon')}</b>
-        <small>${escapeHtml(s.branch_name || 'MG Road · Pune')}</small>
+    <div class="me" style="display:flex;align-items:center;gap:10px">
+      <i class="av" aria-hidden="true" style="width:36px;height:36px;background:var(--amber);color:#fff">${escapeHtml((s.salon_name || 'G')[0].toUpperCase())}</i>
+      <div style="min-width:0;flex:1">
+        <b>${escapeHtml(s.salon_name || 'GENZEE Lounge')}</b>
+        <small style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(s.branch_name || 'Godrej Green Cove · Pune')}</small>
       </div>
+      <button type="button" class="icon-btn" id="btnLogout" title="Switch Salon / Sign Out" aria-label="Sign out">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+      </button>
     </div>
   `;
 
@@ -2101,6 +2107,71 @@ window.addEventListener('hashchange', () => {
   if (next !== state.page) navigate(next);
 });
 
-// Boot Application from SQLite API
+// Salon Login & Auth Management
+function checkAuthAndPrompt() {
+  const session = getSalonSession();
+  if (!session.token) {
+    const loginModal = $('#loginModal');
+    if (loginModal) {
+      loginModal.hidden = false;
+      loginModal.classList.add('open');
+      const userInp = $('#loginUser');
+      if (userInp && !userInp.value) {
+        userInp.value = '8446451506';
+        $('#loginPass').value = 'genzee123';
+      }
+    }
+  }
+}
+
+const loginForm = $('#loginForm');
+if (loginForm) {
+  loginForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = $('#btnLoginSubmit');
+    const errBox = $('#loginError');
+    if (errBox) errBox.style.display = 'none';
+    if (btn) btn.disabled = true;
+
+    try {
+      const username = $('#loginUser').value.trim();
+      const password = $('#loginPass').value.trim();
+      const res = await api.login(username, password);
+      setSalonSession(res.salon, res.token);
+      toast(`Signed in as ${res.salon?.name || 'GENZEE Lounge'}`);
+
+      const loginModal = $('#loginModal');
+      if (loginModal) {
+        loginModal.hidden = true;
+        loginModal.classList.remove('open');
+      }
+
+      await refreshDataForPage(state.page);
+      render(true);
+    } catch (err) {
+      if (errBox) {
+        errBox.textContent = err.message || 'Login failed. Please check your credentials.';
+        errBox.style.display = 'block';
+      }
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  });
+}
+
+document.addEventListener('click', (e) => {
+  if (e.target.closest('#btnLogout')) {
+    clearSalonSession();
+    toast('Logged out from salon');
+    const loginModal = $('#loginModal');
+    if (loginModal) {
+      loginModal.hidden = false;
+      loginModal.classList.add('open');
+    }
+  }
+});
+
+// Boot Application
 const initialHash = (location.hash || '#dashboard').slice(1);
 navigate(NAV.some(([k]) => k === initialHash) ? initialHash : 'dashboard');
+checkAuthAndPrompt();

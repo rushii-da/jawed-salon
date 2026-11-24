@@ -3,7 +3,7 @@ services:
     name: jawed-salon
     runtime: node
     branch: main
-    buildCommand: ""
+    buildCommand: npm install --omit=dev
     startCommand: node server.js
     healthCheckPath: /api/health
     autoDeploy: true
@@ -12,6 +12,10 @@ services:
         value: production
       - key: NODE_VERSION
         value: 22.14.0
+      - key: SUPABASE_URL
+        value: https://thkcugmgzrlwdriyltpn.supabase.co
+      - key: SUPABASE_KEY
+        sync: false
     # Recommended for production SQLite persistence (requires Render Starter plan or higher):
     # disk:
     #   name: jawed-salon-data

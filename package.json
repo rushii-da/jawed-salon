@@ -5,7 +5,9 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node --test tests/api.test.js tests/ui.test.js"
+    "test": "node --test tests/api.test.js tests/ui.test.js",
+    "test:supabase": "node --test tests/supabase.test.js",
+    "test:all": "node --test tests/api.test.js tests/ui.test.js tests/supabase.test.js"
   },
   "engines": {
     "node": ">=22.5.0"
@@ -18,5 +20,8 @@
     "gst",
     "whatsapp"
   ],
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.119.2"
+  }
 }

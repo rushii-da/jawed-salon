@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.1.0] - 2026-11-24
+
+### Multi-Tenancy & Supabase Cloud Migration
+- Implemented `SupabaseSalonDatabase` (`db/supabase-db.js`) with complete `salon_id` isolation across all tables (`salons`, `services`, `stylists`, `clients`, `appointments`, `campaigns`).
+- Connected live to Supabase PostgreSQL in Mumbai (`ap-south-1`) for zero data loss across container sleeps.
+- Created `db/supabase_migration.sql` and provisioned initial schema + pre-seeded pilot salon: **GENZEE UNISEX Hair & Beauty Lounge** (Godrej Green Cove, Mahalunge, Pune).
+- Added multi-tenant Auth API: `POST /api/auth/login` (with SHA-256 password hashing) and `GET /api/auth/me`.
+- Added frontend Login Modal (`#loginModal`) with session caching in `localStorage`, logout switcher, and automatic branding customization for logged-in salon.
+- Dual-engine fallback: automatically runs `SupabaseSalonDatabase` in production/cloud, and `SalonDatabase` (SQLite) in isolated local unit tests.
+- Added comprehensive Supabase integration test suite (`tests/supabase.test.js`) with 16/16 tests passing.
+
 ## [2.0.0] - 2026-11-18
 
 ### Security

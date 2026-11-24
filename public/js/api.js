@@ -1,6 +1,11 @@
 let ownerPinCache = '';
+let salonTokenCache = '';
+let currentSalonId = 'genzee';
+
 try {
   ownerPinCache = sessionStorage.getItem('jawed-owner-pin') || '';
+  salonTokenCache = localStorage.getItem('salon-auth-token') || '';
+  currentSalonId = localStorage.getItem('salon-id') || 'genzee';
 } catch (_) {}
 
 export function setSessionOwnerPin(pin) {
@@ -15,6 +20,44 @@ export function getSessionOwnerPin() {
   return ownerPinCache;
 }
 
+export function setSalonSession(salon, token) {
+  currentSalonId = salon?.id || 'genzee';
+  salonTokenCache = token || '';
+  try {
+    localStorage.setItem('salon-id', currentSalonId);
+    if (salonTokenCache) localStorage.setItem('salon-auth-token', salonTokenCache);
+    else localStorage.removeItem('salon-auth-token');
+    if (salon) localStorage.setItem('salon-profile', JSON.stringify(salon));
+  } catch (_) {}
+}
+
+export function getSalonSession() {
+  let profile = null;
+  try {
+    const raw = localStorage.getItem('salon-profile');
+    if (raw) profile = JSON.parse(raw);
+  } catch (_) {}
+  return {
+    salonId: currentSalonId,
+    token: salonTokenCache,
+    profile
+  };
+}
+
+export function clearSalonSession() {
+  salonTokenCache = '';
+  currentSalonId = 'genzee';
+  try {
+    localStorage.removeItem('salon-auth-token');
+    localStorage.removeItem('salon-profile');
+    localStorage.removeItem('salon-id');
+  } catch (_) {}
+}
+
+export function isSalonLoggedIn() {
+  return Boolean(salonTokenCache);
+}
+
 async function request(path, options = {}) {
   const headers = { ...(options.headers || {}) };
   if (options.body && !headers['Content-Type']) {
@@ -22,6 +65,12 @@ async function request(path, options = {}) {
   }
   if (ownerPinCache) {
     headers['X-Owner-Pin'] = ownerPinCache;
+  }
+  if (currentSalonId) {
+    headers['X-Salon-Id'] = currentSalonId;
+  }
+  if (salonTokenCache) {
+    headers['Authorization'] = `Bearer ${salonTokenCache}`;
   }
 
   const res = await fetch(path, {
@@ -48,6 +97,11 @@ async function request(path, options = {}) {
 }
 
 export const api = {
+  // Auth
+  login: (username, password) => request('/api/auth/login', { method: 'POST', body: { username, password } }),
+  getMe: () => request('/api/auth/me'),
+  logout: () => clearSalonSession(),
+
   getDashboard: () => request('/api/dashboard'),
   getServices: (all = false) => request(`/api/services${all ? '?all=1' : ''}`),
   createService: (body) => request('/api/services', { method: 'POST', body }),
