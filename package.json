@@ -1,7 +1,7 @@
 {
-  "name": "jawed-salon",
-  "version": "2.0.0",
-  "description": "Jawed Salon Owner Operating System with Native SQLite Persistence, Indian GST Invoicing & WhatsApp Queue",
+  "name": "salondesk",
+  "version": "2.1.0",
+  "description": "SalonDesk — Multi-Tenant Salon Operating System with Indian GST Invoicing, WhatsApp Queue & Supabase Cloud",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
