@@ -97,6 +97,24 @@ class SupabaseSalonDatabase {
     });
   }
 
+  /**
+   * Automatically paginates Supabase queries to bypass the PostgREST 1,000-row limit.
+   */
+  async fetchAll(buildQuery, pageSize = 1000) {
+    const all = [];
+    let from = 0;
+    while (true) {
+      const q = buildQuery(this.client).range(from, from + pageSize - 1);
+      const { data, error } = await q;
+      if (error) throw new Error(error.message);
+      if (!data || data.length === 0) break;
+      all.push(...data);
+      if (data.length < pageSize) break;
+      from += pageSize;
+    }
+    return all;
+  }
+
   // ===================== AUTH & SALON PROFILE =====================
   async authSalon(username, password) {
     const cleanUser = String(username || '').trim();
@@ -264,14 +282,14 @@ class SupabaseSalonDatabase {
     const today = getLocalIsoDate(0);
     const startDate = period === 'today' ? today : period === 'week' ? getLocalIsoDate(-6) : getLocalIsoDate(-29);
 
-    const { data: apts, error: aptErr } = await this.client
-      .from('appointments')
-      .select('*')
-      .eq('salon_id', salonId)
-      .eq('status', 'Completed')
-      .gte('date', startDate)
-      .lte('date', today);
-    if (aptErr) throw new Error(aptErr.message);
+    const apts = await this.fetchAll(c =>
+      c.from('appointments')
+        .select('*')
+        .eq('salon_id', salonId)
+        .eq('status', 'Completed')
+        .gte('date', startDate)
+        .lte('date', today)
+    );
 
     const last7Dates = [];
     for (let i = -6; i <= 0; i++) last7Dates.push(getLocalIsoDate(i));
@@ -370,12 +388,12 @@ class SupabaseSalonDatabase {
   }
 
   async getClients(salonId, filters = {}) {
-    const { data, error } = await this.client
-      .from('clients')
-      .select('*')
-      .eq('salon_id', salonId)
-      .order('last_visit_at', { ascending: false });
-    if (error) throw new Error(error.message);
+    const data = await this.fetchAll(c =>
+      c.from('clients')
+        .select('*')
+        .eq('salon_id', salonId)
+        .order('last_visit_at', { ascending: false })
+    );
 
     let list = (data || []).map(r => this.hydrateClientRow(r));
     if (filters.search) {
@@ -908,21 +926,23 @@ class SupabaseSalonDatabase {
     const prevStart = getLocalIsoDate(-(days * 2 - 1));
     const prevEnd = getLocalIsoDate(-days);
 
-    const { data: currentRows } = await this.client
-      .from('appointments')
-      .select('*')
-      .eq('salon_id', salonId)
-      .eq('status', 'Completed')
-      .gte('date', startDate)
-      .lte('date', today);
+    const currentRows = await this.fetchAll(c =>
+      c.from('appointments')
+        .select('*')
+        .eq('salon_id', salonId)
+        .eq('status', 'Completed')
+        .gte('date', startDate)
+        .lte('date', today)
+    );
 
-    const { data: prevRows } = await this.client
-      .from('appointments')
-      .select('price')
-      .eq('salon_id', salonId)
-      .eq('status', 'Completed')
-      .gte('date', prevStart)
-      .lte('date', prevEnd);
+    const prevRows = await this.fetchAll(c =>
+      c.from('appointments')
+        .select('price')
+        .eq('salon_id', salonId)
+        .eq('status', 'Completed')
+        .gte('date', prevStart)
+        .lte('date', prevEnd)
+    );
 
     const curr = currentRows || [];
     const prev = prevRows || [];
@@ -969,14 +989,15 @@ class SupabaseSalonDatabase {
     const days = period === 'day' ? 1 : period === 'week' ? 7 : 30;
     const startDate = getLocalIsoDate(-(days - 1));
 
-    const { data: rows } = await this.client
-      .from('appointments')
-      .select('*')
-      .eq('salon_id', salonId)
-      .eq('status', 'Completed')
-      .gte('date', startDate)
-      .lte('date', today)
-      .order('date', { ascending: true });
+    const rows = await this.fetchAll(c =>
+      c.from('appointments')
+        .select('*')
+        .eq('salon_id', salonId)
+        .eq('status', 'Completed')
+        .gte('date', startDate)
+        .lte('date', today)
+        .order('date', { ascending: true })
+    );
 
     const settings = await this.getSettings(salonId);
     const header = [
