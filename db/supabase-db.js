@@ -18,12 +18,10 @@ const VALID_PAYMENT_MODES = ['UPI', 'Cash', 'Card', 'Split'];
 const ACTIVE_BOOKING_STATUSES = ['Scheduled', 'Confirmed', 'In-Chair'];
 
 function getLocalIsoDate(offsetDays = 0) {
-  const d = new Date();
-  d.setDate(d.getDate() + offsetDays);
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const dd = String(d.getDate()).padStart(2, '0');
-  return `${yyyy}-${mm}-${dd}`;
+  // Always compute date in India Standard Time (UTC+05:30) so cloud UTC servers don't drift around midnight IST
+  const nowIst = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
+  nowIst.setUTCDate(nowIst.getUTCDate() + offsetDays);
+  return nowIst.toISOString().slice(0, 10);
 }
 
 function normalizePhone(phone) {
@@ -270,33 +268,48 @@ class SupabaseSalonDatabase {
   }
 
   // ===================== STYLISTS =====================
-  async getStylists(salonId, period = 'month') {
-    const { data: stylists, error: stErr } = await this.client
-      .from('stylists')
-      .select('*')
-      .eq('salon_id', salonId)
-      .eq('active', 1)
-      .order('rating', { ascending: false });
-    if (stErr) throw new Error(stErr.message);
-
+  async getStylists(salonId, period = 'month', opts = {}) {
     const today = getLocalIsoDate(0);
     const startDate = period === 'today' ? today : period === 'week' ? getLocalIsoDate(-6) : getLocalIsoDate(-29);
+    const weekStart = getLocalIsoDate(-6);
+    const fetchStart = startDate < weekStart ? startDate : weekStart;
 
-    const apts = await this.fetchAll(c =>
-      c.from('appointments')
+    const [stylistsRes, apts, clients] = await Promise.all([
+      this.client
+        .from('stylists')
         .select('*')
         .eq('salon_id', salonId)
-        .eq('status', 'Completed')
-        .gte('date', startDate)
-        .lte('date', today)
-    );
+        .eq('active', 1)
+        .order('rating', { ascending: false }),
+      this.fetchAll(c =>
+        c.from('appointments')
+          .select('stylist_id, stylist_name, price, rating, client_phone, date')
+          .eq('salon_id', salonId)
+          .eq('status', 'Completed')
+          .gte('date', fetchStart)
+          .lte('date', today)
+      ),
+      opts.allClients
+        ? Promise.resolve(opts.allClients)
+        : this.fetchAll(c =>
+            c.from('clients')
+              .select('phone, visits')
+              .eq('salon_id', salonId)
+          )
+    ]);
+
+    if (stylistsRes.error) throw new Error(stylistsRes.error.message);
+    const stylists = stylistsRes.data || [];
 
     const last7Dates = [];
     for (let i = -6; i <= 0; i++) last7Dates.push(getLocalIsoDate(i));
 
+    const clientVisitsMap = new Map((clients || []).map(c => [c.phone, Number(c.visits || 0)]));
     const allApts = apts || [];
-    return (stylists || []).map(st => {
-      const mine = allApts.filter(a => a.stylist_id === st.id || a.stylist_name === st.name);
+    const periodApts = allApts.filter(a => a.date >= startDate && a.date <= today);
+
+    return stylists.map(st => {
+      const mine = periodApts.filter(a => a.stylist_id === st.id || a.stylist_name === st.name);
       const revenue = mine.reduce((s, a) => s + Number(a.price || 0), 0);
       const clientsServed = mine.length;
       const avgTicket = clientsServed ? Math.round(revenue / clientsServed) : 0;
@@ -307,6 +320,9 @@ class SupabaseSalonDatabase {
       const commissionEarned = Math.round(revenue * (Number(st.commission_pct || 35) / 100));
 
       const uniquePhones = [...new Set(mine.map(a => a.client_phone))];
+      const repeatCount = uniquePhones.filter(ph => (clientVisitsMap.get(ph) || 0) > 1).length;
+      const retentionPct = uniquePhones.length ? Math.round((repeatCount / uniquePhones.length) * 100) : 0;
+
       const weeklyCounts = last7Dates.map(d =>
         allApts.filter(a => (a.stylist_id === st.id || a.stylist_name === st.name) && a.date === d).length
       );
@@ -318,7 +334,7 @@ class SupabaseSalonDatabase {
         revenue,
         avg_ticket: avgTicket,
         commission_earned: commissionEarned,
-        retention_pct: uniquePhones.length ? 75 : 0,
+        retention_pct: retentionPct,
         live_rating: liveRating,
         weekly_counts: weeklyCounts
       };
@@ -847,52 +863,77 @@ class SupabaseSalonDatabase {
 
   async getDashboard(salonId) {
     const today = getLocalIsoDate(0);
+    const weekStart = getLocalIsoDate(-6);
     const lastWeekSameDay = getLocalIsoDate(-7);
 
-    const { data: todayRows } = await this.client
-      .from('appointments')
-      .select('*')
-      .eq('salon_id', salonId)
-      .eq('date', today);
+    const [
+      todayRows,
+      upcomingRes,
+      lastWeekRes,
+      weekRows,
+      allClients,
+      settings
+    ] = await Promise.all([
+      this.fetchAll(c =>
+        c.from('appointments')
+          .select('*')
+          .eq('salon_id', salonId)
+          .eq('date', today)
+          .order('created_at', { ascending: false })
+      ),
+      this.client
+        .from('appointments')
+        .select('*')
+        .eq('salon_id', salonId)
+        .gt('date', today)
+        .in('status', ['Scheduled', 'Confirmed'])
+        .order('date', { ascending: true })
+        .limit(12),
+      this.fetchAll(c =>
+        c.from('appointments')
+          .select('price')
+          .eq('salon_id', salonId)
+          .eq('date', lastWeekSameDay)
+          .eq('status', 'Completed')
+      ),
+      this.fetchAll(c =>
+        c.from('appointments')
+          .select('date, price')
+          .eq('salon_id', salonId)
+          .eq('status', 'Completed')
+          .gte('date', weekStart)
+          .lte('date', today)
+      ),
+      this.getClients(salonId),
+      this.getSettings(salonId)
+    ]);
 
     const completedToday = (todayRows || []).filter(a => a.status === 'Completed');
     const activeQueue = (todayRows || []).filter(a => ACTIVE_BOOKING_STATUSES.includes(a.status));
-
-    const { data: upcomingFuture } = await this.client
-      .from('appointments')
-      .select('*')
-      .eq('salon_id', salonId)
-      .gt('date', today)
-      .in('status', ['Scheduled', 'Confirmed'])
-      .order('date', { ascending: true })
-      .limit(12);
+    const upcomingFuture = upcomingRes?.data || [];
 
     const todayRevenue = completedToday.reduce((s, a) => s + Number(a.price || 0), 0);
-
-    const { data: lastWeekRows } = await this.client
-      .from('appointments')
-      .select('price')
-      .eq('salon_id', salonId)
-      .eq('date', lastWeekSameDay)
-      .eq('status', 'Completed');
-    const lastWeekRevenue = (lastWeekRows || []).reduce((s, a) => s + Number(a.price || 0), 0);
+    const lastWeekRevenue = (lastWeekRes || []).reduce((s, a) => s + Number(a.price || 0), 0);
     const deltaPct = lastWeekRevenue > 0
       ? Math.round(((todayRevenue - lastWeekRevenue) / lastWeekRevenue) * 100)
       : null;
 
-    // Last 7 days series
+    // Group 7-day series in memory from single range query
+    const byDate = new Map();
+    for (const r of weekRows || []) {
+      const cur = byDate.get(r.date) || { revenue: 0, count: 0 };
+      cur.revenue += Number(r.price || 0);
+      cur.count += 1;
+      byDate.set(r.date, cur);
+    }
     const weekSeries = [];
     for (let i = -6; i <= 0; i++) {
       const iso = getLocalIsoDate(i);
-      const label = i === 0 ? 'Today' : new Date(`${iso}T00:00:00`).toLocaleDateString('en-IN', { weekday: 'short' });
-      const { data: dayApts } = await this.client
-        .from('appointments')
-        .select('price')
-        .eq('salon_id', salonId)
-        .eq('date', iso)
-        .eq('status', 'Completed');
-      const rev = (dayApts || []).reduce((s, a) => s + Number(a.price || 0), 0);
-      weekSeries.push({ date: iso, label, revenue: rev, count: (dayApts || []).length });
+      const label = i === 0
+        ? 'Today'
+        : new Date(`${iso}T12:00:00Z`).toLocaleDateString('en-IN', { weekday: 'short', timeZone: 'UTC' });
+      const agg = byDate.get(iso) || { revenue: 0, count: 0 };
+      weekSeries.push({ date: iso, label, revenue: agg.revenue, count: agg.count });
     }
 
     const paymentSplit = this.computePaymentSplit(completedToday);
@@ -901,13 +942,11 @@ class SupabaseSalonDatabase {
       ? +(rated.reduce((s, a) => s + Number(a.rating), 0) / rated.length).toFixed(1)
       : null;
 
-    const allClients = await this.getClients(salonId);
     const clientPhoneVisits = new Map(allClients.map(c => [c.phone, c.visits]));
     const returningToday = completedToday.filter(a => (clientPhoneVisits.get(a.client_phone) || 0) > 1).length;
     const lapsedClients = allClients.filter(c => c.days_ago >= 30);
 
-    const stylistPerf = await this.getStylists(salonId, 'today');
-    const settings = await this.getSettings(salonId);
+    const stylistPerf = await this.getStylists(salonId, 'today', { allClients });
 
     return {
       date: today,
@@ -924,7 +963,7 @@ class SupabaseSalonDatabase {
       stylistPerf,
       completedToday,
       activeQueue,
-      upcomingFuture: upcomingFuture || [],
+      upcomingFuture,
       lapsedClients
     };
   }
@@ -936,23 +975,26 @@ class SupabaseSalonDatabase {
     const prevStart = getLocalIsoDate(-(days * 2 - 1));
     const prevEnd = getLocalIsoDate(-days);
 
-    const currentRows = await this.fetchAll(c =>
-      c.from('appointments')
-        .select('*')
-        .eq('salon_id', salonId)
-        .eq('status', 'Completed')
-        .gte('date', startDate)
-        .lte('date', today)
-    );
-
-    const prevRows = await this.fetchAll(c =>
-      c.from('appointments')
-        .select('price')
-        .eq('salon_id', salonId)
-        .eq('status', 'Completed')
-        .gte('date', prevStart)
-        .lte('date', prevEnd)
-    );
+    const [currentRows, prevRows, allClients, settings] = await Promise.all([
+      this.fetchAll(c =>
+        c.from('appointments')
+          .select('*')
+          .eq('salon_id', salonId)
+          .eq('status', 'Completed')
+          .gte('date', startDate)
+          .lte('date', today)
+      ),
+      this.fetchAll(c =>
+        c.from('appointments')
+          .select('price')
+          .eq('salon_id', salonId)
+          .eq('status', 'Completed')
+          .gte('date', prevStart)
+          .lte('date', prevEnd)
+      ),
+      this.getClients(salonId),
+      this.getSettings(salonId)
+    ]);
 
     const curr = currentRows || [];
     const prev = prevRows || [];
@@ -965,7 +1007,6 @@ class SupabaseSalonDatabase {
     const totalGst = +(curr.reduce((s, a) => s + Number(a.cgst || 0) + Number(a.sgst || 0), 0)).toFixed(2);
     const totalDiscount = +(curr.reduce((s, a) => s + Number(a.discount || 0), 0)).toFixed(2);
 
-    const allClients = await this.getClients(salonId);
     const repeatClients = allClients.filter(c => c.visits > 1).length;
     const retentionPct = allClients.length ? Math.round((repeatClients / allClients.length) * 100) : 0;
 
@@ -975,22 +1016,56 @@ class SupabaseSalonDatabase {
       const iso = getLocalIsoDate(i);
       const dayRows = curr.filter(a => a.date === iso);
       const rev = dayRows.reduce((s, a) => s + Number(a.price || 0), 0);
-      dailySeries.push({ date: iso, revenue: rev, count: dayRows.length });
+      const dt = new Date(`${iso}T12:00:00Z`);
+      dailySeries.push({
+        date: iso,
+        label: i === 0 ? 'Today' : dt.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'UTC' }),
+        shortLabel: i === 0 ? 'Today' : String(dt.getUTCDate()),
+        revenue: rev,
+        count: dayRows.length
+      });
     }
 
     const paymentSplit = this.computePaymentSplit(curr);
+    const openingCash = Number(settings.opening_cash || 0);
+
+    // Top services mix (handles JSONB Array and JSON string safely)
+    const srvMap = new Map();
+    for (const a of curr) {
+      let items = [];
+      if (Array.isArray(a.services_json)) {
+        items = a.services_json;
+      } else if (typeof a.services_json === 'string') {
+        try { items = JSON.parse(a.services_json || '[]'); } catch (_) {}
+      }
+      if (!items.length) items = [{ name: a.service_name, price: a.price }];
+      for (const it of items) {
+        const name = it?.name || a.service_name || 'Service';
+        const cur = srvMap.get(name) || { name, count: 0, revenue: 0 };
+        cur.count += 1;
+        cur.revenue += Number(it?.price || 0);
+        srvMap.set(name, cur);
+      }
+    }
+    const serviceMix = [...srvMap.values()].sort((a, b) => b.revenue - a.revenue);
+
     return {
       period,
+      startDate,
+      endDate: today,
       totalRevenue,
       prevRevenue,
       revenueDeltaPct,
       footfall,
       avgTicket,
+      retentionPct,
       totalGst,
       totalDiscount,
-      retentionPct,
       paymentSplit,
-      dailySeries
+      openingCash,
+      expectedDrawerCash: openingCash + paymentSplit.Cash,
+      dailySeries,
+      serviceMix
     };
   }
 

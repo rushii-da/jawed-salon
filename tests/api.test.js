@@ -62,7 +62,7 @@ describe('Jawed Salon OS — Security, Data Integrity & REST API', () => {
     assert.equal(res.status, 200);
     assert.equal(res.headers['x-content-type-options'], 'nosniff');
     assert.equal(res.headers['x-frame-options'], 'DENY');
-    assert.ok(res.raw.includes('Jawed Salon'));
+    assert.ok(res.raw.includes('SalonDesk'));
   });
 
   it('handles malformed percent-encoded URLs safely with 400', async () => {

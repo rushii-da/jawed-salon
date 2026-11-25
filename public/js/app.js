@@ -5,7 +5,7 @@ import {
 import {
   COL, ICO, WA_SVG, STAR_SVG,
   escapeHtml, inr, normalizePhone, formatPhone, todayIso, formatDisplayDate,
-  av, chip, buildWaUrl, buildReceiptWaText, buildBookingWaText
+  av, chip, buildWaUrl, buildReceiptWaText, buildBookingWaText, parseServicesJson
 } from './utils.js';
 
 const $ = (s) => document.querySelector(s);
@@ -33,7 +33,7 @@ const TIME_SLOTS = ['10:30 AM', '11:30 AM', '01:00 PM', '02:30 PM', '03:30 PM', 
 
 const state = {
   page: 'dashboard',
-  settings: { salon_name: 'Jawed Salon', branch_name: 'MG Road Lounge, Pune', gstin: '27AABCS1429B1Z0', gst_rate: '18', sac_code: '999722', opening_cash: '5000', has_owner_pin: false },
+  settings: { salon_name: 'SalonDesk', branch_name: 'Green Cove, Pune', gstin: '27AAEFG1234A1Z5', gst_rate: '18', sac_code: '999722', opening_cash: '5000', has_owner_pin: false },
   services: [],
   stylists: [],
   clients: [],
@@ -47,7 +47,7 @@ const state = {
   reportPeriod: 'month',
   campSegment: 'At risk',
   campName: 'Win-Back VIP Offer',
-  campMessage: 'Hi {name}, we miss you at Jawed Salon! Enjoy 20% off your next Hair Spa or Color treatment this week. Reply to reserve your chair.',
+  campMessage: 'Hi {name}, we miss you at SalonDesk! Enjoy 20% off your next Hair Spa or Color treatment this week. Reply to reserve your chair.',
   activeCampQueue: null, // { campaign, recipients, sentPhones: Set }
 
   // Walk-in billing form state
@@ -138,8 +138,8 @@ function openReceiptModal(apt) {
   const gstRate = Number(s.gst_rate || 18);
   const halfRate = +(gstRate / 2).toFixed(1);
 
-  $('#rcpSalon').textContent = (s.salon_name || 'JAWED SALON').toUpperCase();
-  $('#rcpFooterSalon').textContent = s.salon_name || 'Jawed Salon';
+  $('#rcpSalon').textContent = (s.salon_name || 'SALONDESK').toUpperCase();
+  $('#rcpFooterSalon').textContent = s.salon_name || 'SalonDesk';
   $('#rcpMeta').textContent = `${s.branch_name || ''} · GSTIN: ${s.gstin || 'N/A'}`;
   $('#rcpId').textContent = apt.invoice_no || apt.id;
   $('#rcpDate').textContent = `${formatDisplayDate(apt.date)} ${apt.time || ''}`.trim();
@@ -150,8 +150,7 @@ function openReceiptModal(apt) {
   $('#rcpSac').textContent = s.sac_code || '999722';
   document.querySelectorAll('.rcpHalfRate').forEach(el => { el.textContent = String(halfRate); });
 
-  let items = [];
-  try { items = JSON.parse(apt.services_json || '[]'); } catch (_) {}
+  let items = parseServicesJson(apt.services_json);
   if (!items.length) {
     items = [{ name: apt.service_name, price: apt.subtotal || apt.price }];
   }
@@ -191,10 +190,10 @@ function renderSidebar() {
 
   $('#side').innerHTML = `
     <div class="logo">
-      <div class="mk" aria-hidden="true">${escapeHtml((s.salon_name || 'J')[0].toUpperCase())}</div>
-      <span>${escapeHtml(s.salon_name || 'Jawed Salon')}</span>
+      <div class="mk" aria-hidden="true">${escapeHtml((s.salon_name || 'S')[0].toUpperCase())}</div>
+      <span>${escapeHtml(s.salon_name || 'SalonDesk')}</span>
     </div>
-    <div class="lbl">SALON OS</div>
+    <div class="lbl">SALONDESK</div>
     <nav id="nav" aria-label="Main Navigation">
       <div class="ind" style="transform:translateY(${state.indicatorTop}px)"></div>
       ${NAV.map(([k, label, ico]) => `
@@ -289,7 +288,7 @@ function renderDashboardView() {
 
   const h = new Date().getHours();
   const greet = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
-  const salonTitle = `${greet}, ${d.settings?.salon_name || 'Jawed Salon'}`;
+  const salonTitle = `${greet}, ${d.settings?.salon_name || 'SalonDesk'}`;
 
   const pm = [
     { k: 'Card', c: 'var(--chart-card)', v: d.paymentSplit.Card || 0 },
@@ -316,7 +315,7 @@ function renderDashboardView() {
   const queueItems = [...d.activeQueue, ...d.upcomingFuture];
   const statusChipCls = { 'In-Chair': 'lime', Confirmed: 'vio', Scheduled: 'amb' };
 
-  return headerBar(salonTitle, `${d.settings?.branch_name || 'MG Road Branch'} · Live SQLite Counter`) + `
+  return headerBar(salonTitle, `${d.settings?.branch_name || 'Main Branch'} · Live Counter`) + `
   <div class="g r1">
     <!-- Today's Collection -->
     <div class="card elevated fx" style="gap:12px;min-height:320px">
@@ -462,7 +461,7 @@ function renderDashboardView() {
       </div>
       <div class="big lg tab-num" data-count="${d.lapsedClients.length}" data-format="int">${d.lapsedClients.length}</div>
       <div style="font-weight:600">Clients inactive for 30+ days</div>
-      <div class="bub">Hi ${escapeHtml(d.lapsedClients[0] ? d.lapsedClients[0].name.split(' ')[0] : 'there')}, we miss you at ${escapeHtml(d.settings?.salon_name || 'Jawed Salon')}! Enjoy 20% off your Hair Spa this week.</div>
+      <div class="bub">Hi ${escapeHtml(d.lapsedClients[0] ? d.lapsedClients[0].name.split(' ')[0] : 'there')}, we miss you at ${escapeHtml(d.settings?.salon_name || 'SalonDesk')}! Enjoy 20% off your Hair Spa this week.</div>
       <div class="sp"></div>
       <button type="button" class="btn f l" data-nav="campaigns">
         <svg viewBox="0 0 24 24" aria-hidden="true">${ICO.campaigns}</svg>
@@ -984,25 +983,28 @@ function renderReportsView() {
   const r = state.reports;
   if (!r) return `<div class="card">Loading financial reports...</div>`;
 
+  const salonId = getSalonSession().salonId || 'genzee';
   const periodCtrl = `
     <div class="seg" role="tablist" aria-label="Report period">
       ${[['day', 'Day'], ['week', 'Week'], ['month', 'Month']].map(([k, lbl]) => `
         <button type="button" class="${state.reportPeriod === k ? 'on' : ''}" data-action="report-period" data-val="${k}" role="tab" aria-selected="${state.reportPeriod === k ? 'true' : 'false'}">${lbl}</button>
       `).join('')}
     </div>
-    <a class="btn l" href="/api/reports/gst-csv?period=${encodeURIComponent(state.reportPeriod)}" download>
+    <a class="btn l" href="/api/reports/gst-csv?period=${encodeURIComponent(state.reportPeriod)}&amp;salon_id=${encodeURIComponent(salonId)}" download>
       <svg viewBox="0 0 24 24" aria-hidden="true">${ICO.download}</svg> Export GST CSV
     </a>
   `;
 
-  const maxRev = Math.max(...r.dailySeries.map(d => d.revenue), 1);
-  const bestDay = r.dailySeries.reduce((best, cur) => cur.revenue > best.revenue ? cur : best, r.dailySeries[0] || { revenue: 0 });
-  const pmTotal = (r.paymentSplit.UPI || 0) + (r.paymentSplit.Card || 0) + (r.paymentSplit.Cash || 0);
+  const dailySeries = r.dailySeries || [];
+  const serviceMix = r.serviceMix || [];
+  const maxRev = Math.max(...dailySeries.map(d => d.revenue), 1);
+  const bestDay = dailySeries.reduce((best, cur) => cur.revenue > best.revenue ? cur : best, dailySeries[0] || { revenue: 0 });
+  const pmTotal = (r.paymentSplit?.UPI || 0) + (r.paymentSplit?.Card || 0) + (r.paymentSplit?.Cash || 0);
   const pct = (v) => pmTotal ? Math.round((v / pmTotal) * 100) : 0;
 
-  return headerBar('Revenue & GST Audit Ledger', `${r.startDate} to ${r.endDate} · Computed directly from SQLite`, periodCtrl) + `
+  return headerBar('Revenue & GST Audit Ledger', `${r.startDate || ''} to ${r.endDate || ''} · Real-time Salon Ledger`, periodCtrl) + `
   <div class="g c4">
-    ${statCard('Gross Revenue', inr(r.totalRevenue), r.revenueDeltaPct != null ? `${r.revenueDeltaPct >= 0 ? '↑' : '↓'} ${Math.abs(r.revenueDeltaPct)}% vs prev period` : 'Live SQLite total', 'vio', { value: r.totalRevenue, format: 'inr' })}
+    ${statCard('Gross Revenue', inr(r.totalRevenue), r.revenueDeltaPct != null ? `${r.revenueDeltaPct >= 0 ? '↑' : '↓'} ${Math.abs(r.revenueDeltaPct)}% vs prev period` : 'Live period total', 'vio', { value: r.totalRevenue, format: 'inr' })}
     ${statCard('Completed Bills', String(r.footfall), `Avg ticket ${inr(r.avgTicket)}`, '', { value: r.footfall, format: 'int' })}
     ${statCard('GST Collected (Incl.)', inr(r.totalGst), `Discounts given: ${inr(r.totalDiscount)}`, 'amb', { value: r.totalGst, format: 'inr' })}
     ${statCard('Client Retention', `${r.retentionPct}%`, 'Repeat visitors across DB', 'lime', { value: r.retentionPct, format: 'pct' })}
@@ -1010,16 +1012,18 @@ function renderReportsView() {
 
   <div class="g c2">
     <div class="card fx">
-      <h2>Daily Gross Revenue ${chip(`Last ${r.dailySeries.length} Days`)}</h2>
+      <h2>Daily Gross Revenue ${chip(`Last ${dailySeries.length} Days`)}</h2>
       <div class="wk" aria-label="Daily revenue chart">
-        ${r.dailySeries.map((d, idx) => {
+        ${dailySeries.map((d, idx) => {
           const isBest = d.revenue > 0 && d.revenue === bestDay.revenue;
-          const isToday = idx === r.dailySeries.length - 1;
+          const isToday = idx === dailySeries.length - 1;
+          const lbl = d.label || d.date;
+          const shortLbl = d.shortLabel || (d.date ? d.date.slice(-2) : '');
           return `
-            <div class="bar-col ${isBest ? 'bst' : isToday ? 'td' : ''}" tabindex="0" aria-label="${escapeHtml(d.label)}: ${inr(d.revenue)}">
-              <span class="bar-tip">${escapeHtml(d.label)}: ${inr(d.revenue)} (${d.count})</span>
+            <div class="bar-col ${isBest ? 'bst' : isToday ? 'td' : ''}" tabindex="0" aria-label="${escapeHtml(lbl)}: ${inr(d.revenue)}">
+              <span class="bar-tip">${escapeHtml(lbl)}: ${inr(d.revenue)} (${d.count})</span>
               <u style="--i:${idx};height:${d.revenue ? Math.max((d.revenue / maxRev) * 100, 10) : 4}%"></u>
-              <span>${escapeHtml(d.shortLabel)}</span>
+              <span>${escapeHtml(shortLbl)}</span>
             </div>
           `;
         }).join('')}
@@ -1039,9 +1043,9 @@ function renderReportsView() {
 
       <div style="background:var(--soft);border-radius:16px;padding:14px;margin-top:auto">
         <small class="mut" style="font-weight:700;display:block;margin-bottom:6px">END-OF-DAY CASH DRAWER</small>
-        <div class="sepl"><span>Opening Float</span><b class="tab-num">${inr(r.openingCash)}</b></div>
+        <div class="sepl"><span>Opening Float</span><b class="tab-num">${inr(r.openingCash || 0)}</b></div>
         <div class="sepl"><span>Cash Sales (${escapeHtml(state.reportPeriod)})</span><b class="tab-num">+${inr(r.paymentSplit.Cash)}</b></div>
-        <div class="sepl"><span><b>Expected Cash in Drawer</b></span><b class="tab-num" style="font-size:15px">${inr(r.expectedDrawerCash)}</b></div>
+        <div class="sepl"><span><b>Expected Cash in Drawer</b></span><b class="tab-num" style="font-size:15px">${inr(r.expectedDrawerCash ?? r.paymentSplit.Cash)}</b></div>
       </div>
     </div>
   </div>
@@ -1058,9 +1062,9 @@ function renderReportsView() {
         </tr>
       </thead>
       <tbody>
-        ${r.serviceMix.length === 0
+        ${serviceMix.length === 0
           ? '<tr><td colspan="4" class="mut" style="text-align:center;padding:18px">No completed bills in this period.</td></tr>'
-          : r.serviceMix.map(s => `
+          : serviceMix.map(s => `
             <tr>
               <td><b>${escapeHtml(s.name)}</b></td>
               <td class="tab-num">${s.count}</td>
@@ -1697,8 +1701,7 @@ document.addEventListener('click', async (e) => {
     const allQ = [...(state.dashboard?.activeQueue || []), ...(state.dashboard?.upcomingFuture || [])];
     const apt = allQ.find(x => x.id === id);
     if (!apt) return;
-    let items = [];
-    try { items = JSON.parse(apt.services_json || '[]'); } catch (_) {}
+    const items = parseServicesJson(apt.services_json);
     const ids = new Set(items.map(i => i.id).filter(Boolean));
     if (ids.size === 0) {
       const byName = state.services.find(s => apt.service_name.includes(s.name));
@@ -1754,7 +1757,7 @@ document.addEventListener('click', async (e) => {
     e.stopPropagation();
     const client = state.clients.find(c => c.id === id);
     if (!client) return;
-    const msg = `Hi ${client.name}! Special offer from ${state.settings.salon_name || 'Jawed Salon'}: Enjoy 20% off your next ${client.last_service || 'Salon Service'}. Reply to reserve your chair!`;
+    const msg = `Hi ${client.name}! Special offer from ${state.settings.salon_name || 'SalonDesk'}: Enjoy 20% off your next ${client.last_service || 'Salon Service'}. Reply to reserve your chair!`;
     window.open(buildWaUrl(client.phone, msg), '_blank', 'noopener');
     toast(`WhatsApp offer opened for ${client.name}`);
     return;

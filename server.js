@@ -125,7 +125,7 @@ function createAppServer(dbOption = null) {
       }
 
       const query = Object.fromEntries(parsedUrl.searchParams.entries());
-      const salonId = String(req.headers['x-salon-id'] || 'genzee').trim();
+      const salonId = String(req.headers['x-salon-id'] || query.salon_id || 'genzee').trim();
 
       // ===================== REST API =====================
       if (reqPath.startsWith('/api/')) {
@@ -143,7 +143,7 @@ function createAppServer(dbOption = null) {
         if (req.method === 'POST' && reqPath === '/api/auth/login') {
           const body = await parseBody(req);
           if (isSupabase) {
-            const auth = await db.authSalon(body.username, body.password);
+            const auth = await db.authSalon(body.username || body.phone, body.password);
             return sendJson(res, 200, auth);
           }
           return sendJson(res, 200, {

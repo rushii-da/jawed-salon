@@ -72,12 +72,23 @@ export function buildWaUrl(phone, message) {
   return `https://wa.me/91${p}?text=${encodeURIComponent(message)}`;
 }
 
+export function parseServicesJson(raw) {
+  if (Array.isArray(raw)) return raw;
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (_) {
+    return [];
+  }
+}
+
 export function buildReceiptWaText(apt, settings = {}) {
-  const salon = settings.salon_name || 'Jawed Salon';
+  const salon = settings.salon_name || 'SalonDesk';
   return `${salon} — Official Invoice (${apt.invoice_no || apt.id})\n\nThank you for visiting us, ${apt.client_name}!\n\nServices: ${apt.service_name}\nStylist: ${apt.stylist_name}\nPayment: ${apt.payment_mode}\nTotal Paid: ${inr(apt.price)} (incl. GST)\n\nWe look forward to styling you again soon!`;
 }
 
 export function buildBookingWaText(apt, settings = {}) {
-  const salon = settings.salon_name || 'Jawed Salon';
+  const salon = settings.salon_name || 'SalonDesk';
   return `Hi ${apt.client_name}! Your appointment at ${salon} is confirmed for ${formatDisplayDate(apt.date)} at ${apt.time} with ${apt.stylist_name} (${apt.service_name}). Reply to reschedule if needed.`;
 }

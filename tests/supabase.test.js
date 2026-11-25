@@ -26,6 +26,17 @@ describe('Salon OS — Supabase Cloud Multi-Tenancy & GENZEE Pilot', () => {
     assert.ok(dash.settings.branch_name.includes('Mahalunge, Pune'));
     assert.ok(Array.isArray(dash.weekSeries) && dash.weekSeries.length === 7, 'Must have 7 days series');
     assert.ok(Array.isArray(dash.stylistPerf) && dash.stylistPerf.length >= 4, 'Must load GENZEE stylists');
+    assert.ok(dash.stylistPerf.every(s => Array.isArray(s.weekly_counts) && s.weekly_counts.length === 7), 'Stylists must include 7-day sparklines');
+  });
+
+  it('returns complete reports contract (serviceMix, cash drawer, dailySeries labels)', async () => {
+    const rep = await db.getReports('genzee', 'week');
+    assert.ok(rep.startDate && rep.endDate, 'Must include startDate and endDate');
+    assert.ok(Array.isArray(rep.serviceMix), 'Must include serviceMix array for Revenue Reports view');
+    assert.ok(rep.serviceMix.length > 0, 'serviceMix must aggregate completed services');
+    assert.ok(typeof rep.openingCash === 'number', 'Must include numeric openingCash');
+    assert.ok(typeof rep.expectedDrawerCash === 'number', 'Must include numeric expectedDrawerCash');
+    assert.ok(rep.dailySeries.every(d => d.label && d.shortLabel), 'dailySeries entries must include label and shortLabel');
   });
 
   it('loads GENZEE service catalog and verifies isolation', async () => {
