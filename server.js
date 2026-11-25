@@ -472,7 +472,11 @@ function createAppServer(dbOption = null) {
         });
       });
     } catch (err) {
-      if (err instanceof ValidationError || err instanceof ConflictError) {
+      if (
+        err instanceof ValidationError ||
+        err instanceof ConflictError ||
+        (err && Number.isInteger(err.statusCode) && err.statusCode >= 400 && err.statusCode < 500 && err.code)
+      ) {
         return sendError(res, err.statusCode, err.message, err.code);
       }
       console.error('[Server Error]:', err);
