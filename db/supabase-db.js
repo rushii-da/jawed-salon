@@ -428,12 +428,52 @@ class SupabaseSalonDatabase {
   }
 
   async updateStylist(salonId, id, updates) {
+    const { data: existing, error: fetchErr } = await this.client
+      .from('stylists')
+      .select('*')
+      .eq('salon_id', salonId)
+      .eq('id', id)
+      .maybeSingle();
+    if (fetchErr) throw new Error(fetchErr.message);
+    if (!existing) return null;
+
     const patch = {};
-    if (updates.name !== undefined) patch.name = String(updates.name).trim();
-    if (updates.role !== undefined) patch.role = String(updates.role).trim();
+    if (updates.name !== undefined) {
+      const nextName = String(updates.name).trim();
+      if (!nextName) throw new ValidationError('Stylist name is required');
+      patch.name = nextName;
+      patch.avatar = nextName.split(/\s+/).filter(Boolean).map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'ST';
+    }
+    if (updates.role !== undefined) {
+      const nextRole = String(updates.role).trim();
+      if (!nextRole) throw new ValidationError('Stylist role is required');
+      patch.role = nextRole;
+    }
     if (updates.phone !== undefined) patch.phone = normalizePhone(updates.phone);
-    if (updates.commission_pct !== undefined) patch.commission_pct = Number(updates.commission_pct);
-    if (updates.active !== undefined) patch.active = updates.active ? 1 : 0;
+    if (updates.commission_pct !== undefined) {
+      const comm = Number(updates.commission_pct);
+      if (!Number.isFinite(comm) || comm < 0 || comm > 100) {
+        throw new ValidationError('Commission percentage must be between 0 and 100');
+      }
+      patch.commission_pct = comm;
+    }
+    if (updates.active !== undefined) {
+      const nextActive = updates.active ? 1 : 0;
+      if (!nextActive && existing.active) {
+        const { count, error: cntErr } = await this.client
+          .from('stylists')
+          .select('id', { count: 'exact', head: true })
+          .eq('salon_id', salonId)
+          .eq('active', 1);
+        if (cntErr) throw new Error(cntErr.message);
+        if ((count || 0) <= 1) {
+          throw new ValidationError('At least one active stylist must remain in the salon roster');
+        }
+      }
+      patch.active = nextActive;
+    }
+
+    if (Object.keys(patch).length === 0) return existing;
 
     const { data, error } = await this.client
       .from('stylists')
@@ -443,8 +483,50 @@ class SupabaseSalonDatabase {
       .select()
       .maybeSingle();
     if (error) throw new Error(error.message);
+
+    if (patch.name && patch.name !== existing.name) {
+      await Promise.all([
+        this.client.from('appointments').update({ stylist_name: patch.name })
+          .eq('salon_id', salonId).eq('stylist_id', id).eq('status', 'Scheduled'),
+        this.client.from('clients').update({ preferred_stylist: patch.name })
+          .eq('salon_id', salonId).eq('preferred_stylist', existing.name)
+      ]);
+    }
+
     this.invalidateCache(salonId);
     return data;
+  }
+
+  async deleteStylist(salonId, id) {
+    const { data: existing, error: fetchErr } = await this.client
+      .from('stylists')
+      .select('id, active')
+      .eq('salon_id', salonId)
+      .eq('id', id)
+      .maybeSingle();
+    if (fetchErr) throw new Error(fetchErr.message);
+    if (!existing) return false;
+
+    if (existing.active) {
+      const { count, error: cntErr } = await this.client
+        .from('stylists')
+        .select('id', { count: 'exact', head: true })
+        .eq('salon_id', salonId)
+        .eq('active', 1);
+      if (cntErr) throw new Error(cntErr.message);
+      if ((count || 0) <= 1) {
+        throw new ValidationError('At least one active stylist must remain in the salon roster');
+      }
+    }
+
+    const { error } = await this.client
+      .from('stylists')
+      .update({ active: 0 })
+      .eq('salon_id', salonId)
+      .eq('id', id);
+    if (error) throw new Error(error.message);
+    this.invalidateCache(salonId);
+    return true;
   }
 
   // ===================== CLIENTS =====================

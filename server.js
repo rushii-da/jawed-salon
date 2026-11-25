@@ -298,6 +298,13 @@ function createAppServer(dbOption = null) {
           const updated = isSupabase ? await db.updateStylist(salonId, id, body) : db.updateStylist(id, body);
           return updated ? sendJson(res, 200, updated) : sendError(res, 404, 'Stylist not found', 'NOT_FOUND');
         }
+        if (req.method === 'DELETE' && reqPath.startsWith('/api/stylists/')) {
+          const pinOk = await checkOwnerPin(req, db, salonId);
+          if (!pinOk) return sendError(res, 401, 'Owner PIN required', 'PIN_REQUIRED');
+          const id = reqPath.slice('/api/stylists/'.length);
+          const ok = isSupabase ? await db.deleteStylist(salonId, id) : db.deleteStylist(id);
+          return ok ? sendJson(res, 200, { success: true, id }) : sendError(res, 404, 'Stylist not found', 'NOT_FOUND');
+        }
 
         // Clients
         if (req.method === 'GET' && reqPath === '/api/clients/lookup') {

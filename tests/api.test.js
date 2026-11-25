@@ -174,6 +174,26 @@ describe('Jawed Salon OS — Security, Data Integrity & REST API', () => {
       commission_pct: 40
     });
     assert.equal(newSty.status, 201);
+    assert.equal(newSty.data.avatar, 'MN');
+
+    const badSty = await reqJson(port, 'PATCH', `/api/stylists/${newSty.data.id}`, { name: '   ' });
+    assert.equal(badSty.status, 400);
+
+    const updSty = await reqJson(port, 'PATCH', `/api/stylists/${newSty.data.id}`, {
+      name: 'Meera Sharma',
+      role: 'Creative Color Director',
+      commission_pct: 42
+    });
+    assert.equal(updSty.status, 200);
+    assert.equal(updSty.data.name, 'Meera Sharma');
+    assert.equal(updSty.data.role, 'Creative Color Director');
+    assert.equal(updSty.data.avatar, 'MS');
+    assert.equal(updSty.data.commission_pct, 42);
+
+    const delSty = await reqJson(port, 'DELETE', `/api/stylists/${newSty.data.id}`);
+    assert.equal(delSty.status, 200);
+    const afterDelSty = await reqJson(port, 'GET', '/api/stylists?period=month');
+    assert.equal(afterDelSty.data.some(s => s.id === newSty.data.id), false);
 
     const camp = await reqJson(port, 'POST', '/api/campaigns', {
       name: 'VIP Hair Spa Week',

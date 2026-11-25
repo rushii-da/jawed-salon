@@ -1083,67 +1083,47 @@ function renderReportsView() {
 
 function renderSettingsView() {
   const s = state.settings;
-  return headerBar('Settings, GST & Service Catalog', 'Configure salon profile, pricing, owner PIN, and dev tools', '') + `
+  return headerBar('Settings, GST & Service Catalog', 'Configure salon profile, team roster, pricing, and owner PIN', '') + `
   <div class="g c2">
-    <div class="card">
-      <h2>Salon Profile &amp; Indian GST Invoice</h2>
-      <form id="settingsForm">
-        <label class="fl" for="setSalon">Salon Name</label>
-        <input class="in" id="setSalon" name="salon_name" value="${escapeHtml(s.salon_name || '')}" required>
-
-        <label class="fl" for="setBranch">Branch Address / Lounge</label>
-        <input class="in" id="setBranch" name="branch_name" value="${escapeHtml(s.branch_name || '')}">
-
-        <div class="g c2-eq">
-          <div>
-            <label class="fl" for="setGstin">GSTIN</label>
-            <input class="in" id="setGstin" name="gstin" value="${escapeHtml(s.gstin || '')}">
-          </div>
-          <div>
-            <label class="fl" for="setSac">SAC Code</label>
-            <input class="in" id="setSac" name="sac_code" value="${escapeHtml(s.sac_code || '999722')}">
-          </div>
-        </div>
-
-        <div class="g c2-eq">
-          <div>
-            <label class="fl" for="setGstRate">Inclusive GST Rate (%)</label>
-            <input class="in" id="setGstRate" name="gst_rate" type="number" min="0" max="28" value="${escapeHtml(s.gst_rate || '18')}">
-          </div>
-          <div>
-            <label class="fl" for="setCash">Opening Cash Float (₹)</label>
-            <input class="in" id="setCash" name="opening_cash" type="number" min="0" value="${escapeHtml(s.opening_cash || '5000')}">
-          </div>
-        </div>
-
-        <label class="fl" for="setPin">Owner Security PIN ${s.has_owner_pin ? chip('PIN Active', 'lime') : chip('Unset')}</label>
-        <input class="in" id="setPin" name="owner_pin" type="password" placeholder="Leave blank to keep unchanged (or enter 4-digit PIN)">
-
-        <div class="modal-actions">
-          <button type="submit" class="btn l">Save Salon Settings</button>
-        </div>
-      </form>
-    </div>
-
     <div class="fx" style="gap:18px">
       <div class="card">
-        <h2>
-          Services &amp; Pricing Catalog
-          <button type="button" class="btn l sm" data-action="open-add-service">
-            <svg viewBox="0 0 24 24" aria-hidden="true">${ICO.plus}</svg> Add Service
-          </button>
-        </h2>
-        ${state.services.map(srv => `
-          <div class="row">
-            <div class="gr">
-              <b>${escapeHtml(srv.name)}</b>
-              <small>${escapeHtml(srv.category)} · ${srv.duration} mins</small>
+        <h2>Salon Profile &amp; Indian GST Invoice</h2>
+        <form id="settingsForm">
+          <label class="fl" for="setSalon">Salon Name</label>
+          <input class="in" id="setSalon" name="salon_name" value="${escapeHtml(s.salon_name || '')}" required>
+
+          <label class="fl" for="setBranch">Branch Address / Lounge</label>
+          <input class="in" id="setBranch" name="branch_name" value="${escapeHtml(s.branch_name || '')}">
+
+          <div class="g c2-eq">
+            <div>
+              <label class="fl" for="setGstin">GSTIN</label>
+              <input class="in" id="setGstin" name="gstin" value="${escapeHtml(s.gstin || '')}">
             </div>
-            <b class="tab-num">${inr(srv.price)}</b>
-            <button type="button" class="btn sec sm" data-action="open-edit-service" data-id="${escapeHtml(srv.id)}">Edit</button>
-            <button type="button" class="btn sec sm" style="color:var(--coral)" data-action="delete-service" data-id="${escapeHtml(srv.id)}">Archive</button>
+            <div>
+              <label class="fl" for="setSac">SAC Code</label>
+              <input class="in" id="setSac" name="sac_code" value="${escapeHtml(s.sac_code || '999722')}">
+            </div>
           </div>
-        `).join('')}
+
+          <div class="g c2-eq">
+            <div>
+              <label class="fl" for="setGstRate">Inclusive GST Rate (%)</label>
+              <input class="in" id="setGstRate" name="gst_rate" type="number" min="0" max="28" value="${escapeHtml(s.gst_rate || '18')}">
+            </div>
+            <div>
+              <label class="fl" for="setCash">Opening Cash Float (₹)</label>
+              <input class="in" id="setCash" name="opening_cash" type="number" min="0" value="${escapeHtml(s.opening_cash || '5000')}">
+            </div>
+          </div>
+
+          <label class="fl" for="setPin">Owner Security PIN ${s.has_owner_pin ? chip('PIN Active', 'lime') : chip('Unset')}</label>
+          <input class="in" id="setPin" name="owner_pin" type="password" placeholder="Leave blank to keep unchanged (or enter 4-digit PIN)">
+
+          <div class="modal-actions">
+            <button type="submit" class="btn l">Save Salon Settings</button>
+          </div>
+        </form>
       </div>
 
       <div class="card" style="border-color:rgba(220,38,38,0.3)">
@@ -1159,6 +1139,54 @@ function renderSettingsView() {
         ` : ''}
         <p class="mut" style="font-size:13px;margin:0 0 12px">Resetting clears all transactions and restores demo seed data. Automatically disabled when <code>NODE_ENV=production</code>.</p>
         <button type="button" class="btn dan sm" data-action="open-reset-modal">Reset Demo Database</button>
+      </div>
+    </div>
+
+    <div class="fx" style="gap:18px">
+      <div class="card" id="settingsStylistsCard">
+        <h2>
+          Team &amp; Stylists Roster
+          <button type="button" class="btn l sm" data-action="open-add-stylist">
+            <svg viewBox="0 0 24 24" aria-hidden="true">${ICO.plus}</svg> Add Stylist
+          </button>
+        </h2>
+        ${state.stylists.length === 0
+          ? '<div class="mut" style="font-size:13px">No active stylists found. Add your first team member above.</div>'
+          : state.stylists.map((st, idx) => `
+            <div class="row">
+              ${av(st.name, idx, 34)}
+              <div class="gr">
+                <b title="${escapeHtml(st.name)}">${escapeHtml(st.name)}</b>
+                <small>${escapeHtml(st.role)} · ${Number(st.commission_pct ?? 35)}% comm.${st.phone ? ` · ${escapeHtml(formatPhone(st.phone))}` : ''}</small>
+              </div>
+              <div class="row-actions">
+                <button type="button" class="btn sec sm" data-action="open-edit-stylist" data-id="${escapeHtml(st.id)}">Edit</button>
+                ${state.stylists.length > 1 ? `<button type="button" class="btn sec sm" style="color:var(--coral)" data-action="delete-stylist" data-id="${escapeHtml(st.id)}">Archive</button>` : ''}
+              </div>
+            </div>
+          `).join('')}
+      </div>
+
+      <div class="card">
+        <h2>
+          Services &amp; Pricing Catalog
+          <button type="button" class="btn l sm" data-action="open-add-service">
+            <svg viewBox="0 0 24 24" aria-hidden="true">${ICO.plus}</svg> Add Service
+          </button>
+        </h2>
+        ${state.services.map(srv => `
+          <div class="row">
+            <div class="gr">
+              <b>${escapeHtml(srv.name)}</b>
+              <small>${escapeHtml(srv.category)} · ${srv.duration} mins</small>
+            </div>
+            <b class="tab-num">${inr(srv.price)}</b>
+            <div class="row-actions">
+              <button type="button" class="btn sec sm" data-action="open-edit-service" data-id="${escapeHtml(srv.id)}">Edit</button>
+              <button type="button" class="btn sec sm" style="color:var(--coral)" data-action="delete-service" data-id="${escapeHtml(srv.id)}">Archive</button>
+            </div>
+          </div>
+        `).join('')}
       </div>
     </div>
   </div>`;
@@ -1225,24 +1253,29 @@ async function openClientDrawer(clientId) {
 function openStylistModal(stylist = null) {
   $('#fmTitle').textContent = stylist ? `Edit ${stylist.name}` : 'Add New Stylist';
   $('#fmBody').innerHTML = `
-    <form id="stylistForm" data-id="${escapeHtml(stylist?.id || '')}">
+    <form id="stylistForm" data-id="${escapeHtml(stylist?.id || '')}" novalidate>
       <label class="fl" for="stName">Full Name <span class="req">*</span></label>
-      <input class="in" id="stName" name="name" value="${escapeHtml(stylist?.name || '')}" required>
-      <label class="fl" for="stRole">Role / Specialty <span class="req">*</span></label>
-      <input class="in" id="stRole" name="role" value="${escapeHtml(stylist?.role || '')}" placeholder="e.g. Senior Hair Stylist" required>
+      <input class="in" id="stName" name="name" value="${escapeHtml(stylist?.name || '')}" placeholder="e.g. Rahul Sharma" aria-describedby="stName-err" autocomplete="off" required>
+      <div class="f-err" id="stName-err">Please enter the stylist's full name</div>
+
+      <label class="fl" for="stRole">Job Role / Specialty <span class="req">*</span></label>
+      <input class="in" id="stRole" name="role" value="${escapeHtml(stylist?.role || '')}" placeholder="e.g. Senior Hair Stylist" aria-describedby="stRole-err" autocomplete="off" required>
+      <div class="f-err" id="stRole-err">Please enter the stylist's job role</div>
+
       <div class="g c2-eq">
         <div>
           <label class="fl" for="stPhone">Mobile Number</label>
-          <input class="in" id="stPhone" name="phone" maxlength="10" value="${escapeHtml(stylist?.phone || '')}">
+          <input class="in" id="stPhone" name="phone" maxlength="10" inputmode="numeric" placeholder="10-digit mobile" value="${escapeHtml(stylist?.phone || '')}" autocomplete="off">
         </div>
         <div>
           <label class="fl" for="stComm">Commission (%)</label>
-          <input class="in" id="stComm" name="commission_pct" type="number" min="0" max="100" value="${escapeHtml(stylist?.commission_pct ?? 35)}" required>
+          <input class="in" id="stComm" name="commission_pct" type="number" min="0" max="100" aria-describedby="stComm-err" value="${escapeHtml(stylist?.commission_pct ?? 35)}" required>
+          <div class="f-err" id="stComm-err">Commission must be between 0 and 100</div>
         </div>
       </div>
       <div class="modal-actions">
         <button type="button" class="btn sec" data-close-modal="formModal">Cancel</button>
-        <button type="submit" class="btn l">${stylist ? 'Update Stylist' : 'Add Stylist'}</button>
+        <button type="submit" class="btn l">${stylist ? 'Save Changes' : 'Add Stylist'}</button>
       </div>
     </form>
   `;
@@ -1357,17 +1390,28 @@ function invalidateClientCaches() {
   _syncState.stylistsCache = {};
 }
 
+function syncStylistSelection(oldName = '', nextName = '') {
+  const fallback = state.stylists[0]?.name || '';
+  if (!state.stylists.some(s => s.name === state.walkin.stylistName) || (oldName && state.walkin.stylistName === oldName)) {
+    state.walkin.stylistName = (nextName && state.stylists.some(s => s.name === nextName)) ? nextName : fallback;
+  }
+  if (!state.stylists.some(s => s.name === state.booking.stylistName) || (oldName && state.booking.stylistName === oldName)) {
+    state.booking.stylistName = (nextName && state.stylists.some(s => s.name === nextName)) ? nextName : fallback;
+  }
+}
+
 async function ensureCoreData(force = false) {
   const fresh = !force && state.services.length > 0 && state.stylists.length > 0 && (Date.now() - _syncState.coreAt < 60_000);
   if (fresh) return;
   const [services, stylists, settings] = await Promise.all([
     api.getServices(),
-    state.stylists.length ? Promise.resolve(state.stylists) : api.getStylists(state.stylistPeriod),
+    (!force && state.stylists.length) ? Promise.resolve(state.stylists) : api.getStylists(state.stylistPeriod),
     api.getSettings()
   ]);
   state.services = services;
   state.stylists = stylists;
   state.settings = settings;
+  syncStylistSelection();
   _syncState.coreAt = Date.now();
 }
 
@@ -2051,6 +2095,25 @@ document.addEventListener('click', async (e) => {
     if (st) openStylistModal(st);
     return;
   }
+  if (action === 'delete-stylist') {
+    if (state.stylists.length <= 1) {
+      toast('Keep at least one active stylist in the roster');
+      return;
+    }
+    try {
+      await api.deleteStylist(id);
+      invalidateClientCaches();
+      state.dashboard = null;
+      state.stylists = await api.getStylists(state.stylistPeriod);
+      _syncState.stylistsCache[state.stylistPeriod] = state.stylists;
+      syncStylistSelection();
+      render(false);
+      toast('Stylist archived');
+    } catch (err) {
+      toast(err.message);
+    }
+    return;
+  }
   if (action === 'open-add-service') { openServiceModal(null); return; }
   if (action === 'open-edit-service') {
     const srv = state.services.find(x => x.id === id);
@@ -2221,6 +2284,18 @@ document.addEventListener('input', async (e) => {
     state.campMessage = el.value;
     const prev = $('#campPreview');
     if (prev) prev.textContent = el.value.replaceAll('{name}', 'Rhea');
+    return;
+  }
+
+  // Stylist modal live validation reset & phone sanitization
+  if (el.id === 'stPhone') {
+    el.value = el.value.replace(/\D/g, '').slice(0, 10);
+    return;
+  }
+  if (el.id === 'stName' || el.id === 'stRole' || el.id === 'stComm') {
+    el.setAttribute('aria-invalid', 'false');
+    const errEl = $(`#${el.id}-err`);
+    if (errEl) errEl.classList.remove('show');
   }
 });
 
@@ -2258,20 +2333,50 @@ document.addEventListener('submit', async (e) => {
 
   if (form.id === 'stylistForm') {
     e.preventDefault();
-    const fd = new FormData(form);
-    const body = {
-      name: fd.get('name'),
-      role: fd.get('role'),
-      phone: fd.get('phone'),
-      commission_pct: Number(fd.get('commission_pct'))
+    const nameEl = $('#stName');
+    const roleEl = $('#stRole');
+    const phoneEl = $('#stPhone');
+    const commEl = $('#stComm');
+    const name = String(nameEl?.value || '').trim();
+    const role = String(roleEl?.value || '').trim();
+    const comm = Number(commEl?.value);
+
+    const setErr = (el, errId, invalid) => {
+      if (el) el.setAttribute('aria-invalid', invalid ? 'true' : 'false');
+      const msgEl = $(`#${errId}`);
+      if (msgEl) msgEl.classList.toggle('show', invalid);
     };
+    setErr(nameEl, 'stName-err', !name);
+    setErr(roleEl, 'stRole-err', !role);
+    setErr(commEl, 'stComm-err', !Number.isFinite(comm) || comm < 0 || comm > 100);
+
+    const firstInvalid = [
+      !name ? nameEl : null,
+      !role ? roleEl : null,
+      (!Number.isFinite(comm) || comm < 0 || comm > 100) ? commEl : null
+    ].find(Boolean);
+    if (firstInvalid) {
+      firstInvalid.focus();
+      return;
+    }
+
+    const body = {
+      name,
+      role,
+      phone: normalizePhone(phoneEl?.value || ''),
+      commission_pct: comm
+    };
+    const prevStylist = form.dataset.id ? state.stylists.find(x => x.id === form.dataset.id) : null;
     try {
-      if (form.dataset.id) await api.updateStylist(form.dataset.id, body);
-      else await api.createStylist(body);
+      const saved = form.dataset.id
+        ? await api.updateStylist(form.dataset.id, body)
+        : await api.createStylist(body);
       invalidateClientCaches();
+      state.dashboard = null;
       closeOverlay('formModal');
       state.stylists = await api.getStylists(state.stylistPeriod);
       _syncState.stylistsCache[state.stylistPeriod] = state.stylists;
+      syncStylistSelection(prevStylist?.name || '', saved?.name || body.name);
       render(false);
       toast(form.dataset.id ? 'Stylist updated' : 'Stylist added');
     } catch (err) {

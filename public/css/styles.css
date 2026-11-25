@@ -763,6 +763,7 @@ main {
 .row.clickable { cursor: pointer; transition: background .2s, transform .2s; }
 .row.clickable:hover { transform: translateX(2px); }
 .row .gr { flex: 1; min-width: 0; }
+.row-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 
 .bub {
   background: var(--wa-bubble-bg);

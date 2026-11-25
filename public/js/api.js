@@ -140,6 +140,7 @@ export const api = {
   getStylists: (period = 'month') => request(`/api/stylists?period=${encodeURIComponent(period)}`),
   createStylist: (body) => request('/api/stylists', { method: 'POST', body }),
   updateStylist: (id, body) => request(`/api/stylists/${encodeURIComponent(id)}`, { method: 'PATCH', body }),
+  deleteStylist: (id) => request(`/api/stylists/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 
   getClients: (params = {}) => {
     const sp = new URLSearchParams();

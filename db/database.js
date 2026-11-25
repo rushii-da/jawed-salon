@@ -549,7 +549,7 @@ class SalonDatabase {
       throw new ValidationError('Commission percentage must be between 0 and 100');
     }
     const id = 'sty-' + crypto.randomUUID().slice(0, 8);
-    const avatar = name.split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
+    const avatar = name.split(/\s+/).filter(Boolean).map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'ST';
     this.db.prepare(
       'INSERT INTO stylists (id, name, role, avatar, phone, commission_pct, rating, active) VALUES (?, ?, ?, ?, ?, ?, 4.9, 1)'
     ).run(id, name, role, avatar, normalizePhone(payload.phone || ''), comm);
@@ -559,20 +559,69 @@ class SalonDatabase {
   updateStylist(id, updates) {
     const existing = this.db.prepare('SELECT * FROM stylists WHERE id = ?').get(id);
     if (!existing) return null;
-    const allowed = ['name', 'role', 'phone', 'commission_pct', 'active'];
     const sets = [];
     const vals = [];
-    for (const k of allowed) {
-      if (updates[k] !== undefined) {
-        sets.push(`${k} = ?`);
-        vals.push(k === 'phone' ? normalizePhone(updates[k]) : k === 'active' ? (updates[k] ? 1 : 0) : updates[k]);
-      }
+    let nextName = null;
+
+    if (updates.name !== undefined) {
+      nextName = String(updates.name).trim();
+      if (!nextName) throw new ValidationError('Stylist name is required');
+      const avatar = nextName.split(/\s+/).filter(Boolean).map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'ST';
+      sets.push('name = ?', 'avatar = ?');
+      vals.push(nextName, avatar);
     }
+    if (updates.role !== undefined) {
+      const nextRole = String(updates.role).trim();
+      if (!nextRole) throw new ValidationError('Stylist role is required');
+      sets.push('role = ?');
+      vals.push(nextRole);
+    }
+    if (updates.phone !== undefined) {
+      sets.push('phone = ?');
+      vals.push(normalizePhone(updates.phone));
+    }
+    if (updates.commission_pct !== undefined) {
+      const comm = Number(updates.commission_pct);
+      if (!Number.isFinite(comm) || comm < 0 || comm > 100) {
+        throw new ValidationError('Commission percentage must be between 0 and 100');
+      }
+      sets.push('commission_pct = ?');
+      vals.push(comm);
+    }
+    if (updates.active !== undefined) {
+      const nextActive = updates.active ? 1 : 0;
+      if (!nextActive && existing.active) {
+        const countRow = this.db.prepare('SELECT COUNT(*) AS c FROM stylists WHERE active = 1').get();
+        if ((countRow?.c || 0) <= 1) {
+          throw new ValidationError('At least one active stylist must remain in the salon roster');
+        }
+      }
+      sets.push('active = ?');
+      vals.push(nextActive);
+    }
+
     if (sets.length > 0) {
       vals.push(id);
       this.db.prepare(`UPDATE stylists SET ${sets.join(', ')} WHERE id = ?`).run(...vals);
     }
+    if (nextName && nextName !== existing.name) {
+      this.db.prepare("UPDATE appointments SET stylist_name = ? WHERE stylist_id = ? AND status = 'Scheduled'").run(nextName, id);
+      this.db.prepare('UPDATE clients SET preferred_stylist = ? WHERE preferred_stylist = ?').run(nextName, existing.name);
+    }
     return this.db.prepare('SELECT * FROM stylists WHERE id = ?').get(id);
+  }
+
+  deleteStylist(id) {
+    const existing = this.db.prepare('SELECT * FROM stylists WHERE id = ?').get(id);
+    if (!existing) return false;
+    if (existing.active) {
+      const countRow = this.db.prepare('SELECT COUNT(*) AS c FROM stylists WHERE active = 1').get();
+      if ((countRow?.c || 0) <= 1) {
+        throw new ValidationError('At least one active stylist must remain in the salon roster');
+      }
+    }
+    const res = this.db.prepare('UPDATE stylists SET active = 0 WHERE id = ?').run(id);
+    return res.changes > 0;
   }
 
   // ===================== CLIENTS =====================
