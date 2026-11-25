@@ -88,12 +88,41 @@ async function request(path, options = {}) {
   }
 
   if (!res.ok) {
+    if (res.status === 401 && data?.code === 'AUTH_REQUIRED') {
+      clearSalonSession();
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('salondesk:auth-required', { detail: data }));
+      }
+    }
     const err = new Error(data?.error || `Request failed (${res.status})`);
     err.status = res.status;
     err.code = data?.code || 'ERROR';
     throw err;
   }
   return data;
+}
+
+async function requestText(path) {
+  const headers = {};
+  if (currentSalonId) headers['X-Salon-Id'] = currentSalonId;
+  if (salonTokenCache) headers['Authorization'] = `Bearer ${salonTokenCache}`;
+  const res = await fetch(path, { headers });
+  const text = await res.text();
+  if (!res.ok) {
+    let data = null;
+    try { data = JSON.parse(text); } catch (_) {}
+    if (res.status === 401 && data?.code === 'AUTH_REQUIRED') {
+      clearSalonSession();
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('salondesk:auth-required', { detail: data }));
+      }
+    }
+    const err = new Error(data?.error || `Download failed (${res.status})`);
+    err.status = res.status;
+    err.code = data?.code || 'ERROR';
+    throw err;
+  }
+  return text;
 }
 
 export const api = {
@@ -139,6 +168,7 @@ export const api = {
   markCampaignSent: (id, sentCount) => request(`/api/campaigns/${encodeURIComponent(id)}`, { method: 'PATCH', body: { sent_count: sentCount } }),
 
   getReports: (period = 'month') => request(`/api/reports?period=${encodeURIComponent(period)}`),
+  exportGstCsv: (period = 'month') => requestText(`/api/reports/gst-csv?period=${encodeURIComponent(period)}`),
   getSettings: () => request('/api/settings'),
   updateSettings: (body) => request('/api/settings', { method: 'PATCH', body }),
   resetDatabase: () => request('/api/reset', { method: 'POST' })

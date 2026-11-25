@@ -216,4 +216,47 @@ describe('Jawed Salon OS — Security, Data Integrity & REST API', () => {
       else process.env.NODE_ENV = prevEnv;
     }
   });
+
+  it('enforces HMAC-signed Bearer token authentication when requireAuth is enabled', async () => {
+    const authTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'salondesk-auth-test-'));
+    const authDbFile = path.join(authTmp, 'auth.db');
+    const authServer = createAppServer({ dbPath: authDbFile, requireAuth: true });
+    await new Promise((resolve) => authServer.listen(0, '127.0.0.1', resolve));
+    const authPort = authServer.address().port;
+
+    try {
+      // Health check stays public
+      const health = await reqJson(authPort, 'GET', '/api/health');
+      assert.equal(health.status, 200);
+
+      // Unauthenticated protected routes must reject with 401 AUTH_REQUIRED
+      const unauthDash = await reqJson(authPort, 'GET', '/api/dashboard');
+      assert.equal(unauthDash.status, 401);
+      assert.equal(unauthDash.data.code, 'AUTH_REQUIRED');
+
+      const unauthCsv = await reqJson(authPort, 'GET', '/api/reports/gst-csv?period=week');
+      assert.equal(unauthCsv.status, 401);
+
+      // Forged token must reject with 401
+      const forged = await reqJson(authPort, 'GET', '/api/clients', null, {
+        Authorization: 'Bearer forged.token'
+      });
+      assert.equal(forged.status, 401);
+
+      // Login issues valid HMAC token granting access
+      const login = await reqJson(authPort, 'POST', '/api/auth/login', { username: 'genzee' });
+      assert.equal(login.status, 200);
+      assert.ok(login.data.token && login.data.token.includes('.'));
+
+      const okDash = await reqJson(authPort, 'GET', '/api/dashboard', null, {
+        Authorization: `Bearer ${login.data.token}`
+      });
+      assert.equal(okDash.status, 200);
+      assert.ok(okDash.data.todayRevenue >= 0);
+    } finally {
+      await new Promise((resolve) => authServer.close(resolve));
+      try { authServer.db.close(); } catch (_) {}
+      fs.rmSync(authTmp, { recursive: true, force: true });
+    }
+  });
 });

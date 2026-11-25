@@ -2,6 +2,7 @@ services:
   - type: web
     name: salondesk
     runtime: node
+    region: singapore
     branch: main
     buildCommand: npm install --omit=dev
     startCommand: node server.js

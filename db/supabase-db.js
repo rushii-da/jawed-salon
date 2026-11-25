@@ -150,6 +150,15 @@ class SupabaseSalonDatabase {
   }
 
   // ===================== AUTH & SALON PROFILE =====================
+  sanitizeSalonRecord(salon) {
+    if (!salon) return null;
+    const { password_hash, owner_pin, ...safe } = salon;
+    return {
+      ...safe,
+      has_owner_pin: Boolean(owner_pin && String(owner_pin).length > 0)
+    };
+  }
+
   async authSalon(username, password) {
     const cleanUser = String(username || '').trim();
     const cleanPass = String(password || '').trim();
@@ -173,25 +182,28 @@ class SupabaseSalonDatabase {
     }
 
     const token = crypto.randomBytes(24).toString('hex');
-    const { password_hash, ...safeSalon } = salon;
-    return { token, salon: safeSalon };
+    return { token, salon: this.sanitizeSalonRecord(salon) };
   }
 
-  async getSalon(salonId) {
-    return this.cached(`salon:${salonId}`, async () => {
+  async getSalonRaw(salonId) {
+    return this.cached(`salonRaw:${salonId}`, async () => {
       const { data, error } = await this.client
         .from('salons')
         .select('*')
         .eq('id', salonId)
         .maybeSingle();
       if (error || !data) return null;
-      const { password_hash, ...safe } = data;
-      return safe;
+      return data;
     });
   }
 
+  async getSalon(salonId) {
+    const raw = await this.getSalonRaw(salonId);
+    return this.sanitizeSalonRecord(raw);
+  }
+
   async getSettings(salonId) {
-    const salon = await this.getSalon(salonId);
+    const salon = await this.getSalonRaw(salonId);
     if (!salon) return {};
     return {
       salon_name: salon.name,
@@ -835,7 +847,7 @@ class SupabaseSalonDatabase {
       .maybeSingle();
     if (error) throw new Error(error.message);
 
-    // Reconcile client visit stats
+    // Reconcile client visit stats (credit or reverse)
     if (existing.status !== 'Completed' && nextStatus === 'Completed') {
       await this.upsertClientRecord(salonId, {
         name: existing.client_name,
@@ -847,13 +859,39 @@ class SupabaseSalonDatabase {
         creditVisit: true,
         rating: patch.rating
       });
+    } else if (existing.status === 'Completed' && nextStatus !== 'Completed') {
+      await this.revertClientVisit(salonId, existing.client_phone, existing.price);
     }
 
     this.invalidateCache(salonId);
     return data;
   }
 
+  async revertClientVisit(salonId, phone, amount) {
+    const existing = await this.getClientByPhone(salonId, phone);
+    if (!existing) return;
+    const nextVisits = Math.max(0, Number(existing.visits || 0) - 1);
+    const nextSpend = Math.max(0, Number(existing.total_spend || 0) - Number(amount || 0));
+    const daysAgo = existing.last_visit_at ? daysBetweenIso(existing.last_visit_at) : 0;
+    const tier = computeTier(nextVisits, nextSpend, daysAgo);
+    await this.client
+      .from('clients')
+      .update({
+        visits: nextVisits,
+        total_spend: nextSpend,
+        tier,
+        updated_at: new Date().toISOString()
+      })
+      .eq('salon_id', salonId)
+      .eq('id', existing.id);
+  }
+
   async deleteAppointment(salonId, id) {
+    const existing = await this.getAppointmentById(salonId, id);
+    if (!existing) return false;
+    if (existing.status === 'Completed') {
+      await this.revertClientVisit(salonId, existing.client_phone, existing.price);
+    }
     const { error } = await this.client
       .from('appointments')
       .delete()

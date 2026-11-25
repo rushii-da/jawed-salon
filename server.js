@@ -2,12 +2,44 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const zlib = require('node:zlib');
+const crypto = require('node:crypto');
 const { SalonDatabase, DB_PATH, ConflictError, ValidationError } = require('./db/database');
 const { SupabaseSalonDatabase } = require('./db/supabase-db');
 
 const PORT = Number(process.env.PORT) || 3000;
 const PUBLIC_DIR = path.resolve(__dirname, 'public');
 const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || '';
+const AUTH_SECRET = process.env.AUTH_SECRET || crypto.createHash('sha256').update(process.env.SUPABASE_KEY || 'salondesk-local-dev-secret-2026').digest('hex');
+
+function signAuthToken({ salonId, username }, ttlMs = 30 * 24 * 60 * 60 * 1000) {
+  const payload = {
+    salonId: String(salonId),
+    username: String(username || ''),
+    iat: Date.now(),
+    exp: Date.now() + ttlMs
+  };
+  const body = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
+  const sig = crypto.createHmac('sha256', AUTH_SECRET).update(body).digest('base64url');
+  return `${body}.${sig}`;
+}
+
+function verifyAuthToken(token) {
+  if (!token || typeof token !== 'string') return null;
+  const parts = token.split('.');
+  if (parts.length !== 2) return null;
+  const [body, sig] = parts;
+  const expectedSig = crypto.createHmac('sha256', AUTH_SECRET).update(body).digest('base64url');
+  const a = Buffer.from(sig, 'utf8');
+  const b = Buffer.from(expectedSig, 'utf8');
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'));
+    if (!payload || !payload.salonId || !payload.exp || payload.exp < Date.now()) return null;
+    return payload;
+  } catch (_) {
+    return null;
+  }
+}
 
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -119,10 +151,15 @@ async function checkOwnerPin(req, db, salonId) {
 }
 
 function createAppServer(dbOption = null) {
+  const opts = (dbOption && typeof dbOption === 'object' && !Array.isArray(dbOption))
+    ? dbOption
+    : { dbPath: dbOption };
+  const dbPathOpt = opts.dbPath || null;
   // If explicitly passed an SQLite path or in test mode without Supabase, use SQLite
-  const useSqlite = dbOption && typeof dbOption === 'string' && !dbOption.startsWith('http');
-  const db = useSqlite ? new SalonDatabase(dbOption) : new SupabaseSalonDatabase();
+  const useSqlite = dbPathOpt && typeof dbPathOpt === 'string' && !dbPathOpt.startsWith('http');
+  const db = useSqlite ? new SalonDatabase(dbPathOpt) : new SupabaseSalonDatabase();
   const isSupabase = db instanceof SupabaseSalonDatabase;
+  const requireAuth = Boolean(opts.requireAuth || isSupabase);
 
   const server = http.createServer(async (req, res) => {
     res._acceptsGzip = /\bgzip\b/i.test(String(req.headers['accept-encoding'] || ''));
@@ -148,31 +185,45 @@ function createAppServer(dbOption = null) {
       }
 
       const query = Object.fromEntries(parsedUrl.searchParams.entries());
-      const salonId = String(req.headers['x-salon-id'] || query.salon_id || 'genzee').trim();
+      let salonId = String(req.headers['x-salon-id'] || query.salon_id || 'genzee').trim();
 
       // ===================== REST API =====================
       if (reqPath.startsWith('/api/')) {
-        // Health check
+        // Health check (public)
         if (req.method === 'GET' && reqPath === '/api/health') {
           return sendJson(res, 200, {
             status: 'ok',
             engine: isSupabase ? 'supabase:postgres' : 'node:sqlite',
-            salon_id: salonId,
             timestamp: new Date().toISOString()
           });
         }
 
-        // Auth: Login
+        // Auth: Login (public)
         if (req.method === 'POST' && reqPath === '/api/auth/login') {
           const body = await parseBody(req);
           if (isSupabase) {
             const auth = await db.authSalon(body.username || body.phone, body.password);
-            return sendJson(res, 200, auth);
+            const signedToken = signAuthToken({ salonId: auth.salon.id, username: auth.salon.username });
+            return sendJson(res, 200, { token: signedToken, salon: auth.salon });
           }
+          const devSalonId = String(body.username || body.salon_id || 'genzee').trim() || 'genzee';
+          const signedToken = signAuthToken({ salonId: devSalonId, username: devSalonId });
           return sendJson(res, 200, {
-            token: 'dev-token',
-            salon: { id: 'genzee', name: 'GENZEE UNISEX Hair & Beauty Lounge', branch: 'Mahalunge, Pune', phone: '8446451506' }
+            token: signedToken,
+            salon: { id: devSalonId, name: 'SalonDesk Studio', branch: 'Local Counter', phone: devSalonId }
           });
+        }
+
+        // Enforce cryptographically signed Bearer token in production / auth-enabled mode
+        if (requireAuth) {
+          const authHeader = String(req.headers.authorization || '');
+          const match = authHeader.match(/^Bearer\s+(.+)$/i);
+          const tokenPayload = match ? verifyAuthToken(match[1].trim()) : null;
+          if (!tokenPayload) {
+            return sendError(res, 401, 'Authentication required. Please sign in.', 'AUTH_REQUIRED');
+          }
+          // Bind tenant cryptographically from verified token (prevents X-Salon-Id spoofing)
+          salonId = tokenPayload.salonId;
         }
 
         // Auth: Me

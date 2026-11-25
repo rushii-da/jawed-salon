@@ -986,16 +986,15 @@ function renderReportsView() {
   const r = state.reports;
   if (!r) return `<div class="card">Loading financial reports...</div>`;
 
-  const salonId = getSalonSession().salonId || 'genzee';
   const periodCtrl = `
     <div class="seg" role="tablist" aria-label="Report period">
       ${[['day', 'Day'], ['week', 'Week'], ['month', 'Month']].map(([k, lbl]) => `
         <button type="button" class="${state.reportPeriod === k ? 'on' : ''}" data-action="report-period" data-val="${k}" role="tab" aria-selected="${state.reportPeriod === k ? 'true' : 'false'}">${lbl}</button>
       `).join('')}
     </div>
-    <a class="btn l" href="/api/reports/gst-csv?period=${encodeURIComponent(state.reportPeriod)}&amp;salon_id=${encodeURIComponent(salonId)}" download>
+    <button type="button" class="btn l" data-action="export-gst-csv">
       <svg viewBox="0 0 24 24" aria-hidden="true">${ICO.download}</svg> Export GST CSV
-    </a>
+    </button>
   `;
 
   const dailySeries = r.dailySeries || [];
@@ -1293,6 +1292,28 @@ function openRescheduleModal(apt) {
       <div class="modal-actions">
         <button type="button" class="btn sec" data-close-modal="formModal">Cancel</button>
         <button type="submit" class="btn l">Save New Slot</button>
+      </div>
+    </form>
+  `;
+  openOverlay('formModal');
+}
+
+function openVoidBillModal(apt) {
+  if (!apt) return;
+  const needPin = Boolean(state.settings?.has_owner_pin && !getSessionOwnerPin());
+  $('#fmTitle').textContent = `Void Invoice ${apt.invoice_no || apt.id}`;
+  $('#fmBody').innerHTML = `
+    <form id="voidBillForm" data-id="${escapeHtml(apt.id)}">
+      <p class="mut" style="margin:0 0 12px;font-size:13.5px;line-height:1.5">
+        Voiding <b>${escapeHtml(apt.client_name)}</b>'s bill (<b>${inr(apt.price)}</b>) removes it from GST audit totals and reverses the client's visit &amp; spend count.
+      </p>
+      ${needPin ? `
+        <label class="fl" for="voidPin">Owner Security PIN <span class="req">*</span></label>
+        <input class="in" id="voidPin" name="owner_pin" type="password" placeholder="Enter Owner PIN" required autocomplete="off">
+      ` : ''}
+      <div class="modal-actions">
+        <button type="button" class="btn sec" data-close-modal="formModal">Keep Bill</button>
+        <button type="submit" class="btn dan">Confirm Void Bill</button>
       </div>
     </form>
   `;
@@ -1724,8 +1745,8 @@ async function handleBookingSubmit(force = false) {
 }
 
 document.addEventListener('click', async (e) => {
-  // Backdrop click closes modal/drawer
-  if (e.target.classList.contains('modal-overlay') || e.target.classList.contains('drawer-overlay')) {
+  // Backdrop click closes dismissible modal/drawer (never dismiss mandatory login)
+  if ((e.target.classList.contains('modal-overlay') || e.target.classList.contains('drawer-overlay')) && e.target.id !== 'loginModal') {
     closeOverlay(e.target.id);
     return;
   }
@@ -1750,7 +1771,7 @@ document.addEventListener('click', async (e) => {
     return;
   }
 
-  const target = e.target.closest('[data-action], #sv2, #btnBookAppt, #btnConfirmReset, #btnPrintReceipt, #btnWaReceipt, #btnLaunchCamp');
+  const target = e.target.closest('[data-action], #sv2, #btnBookAppt, #btnConfirmReset, #btnPrintReceipt, #btnWaReceipt, #btnVoidReceipt, #btnLaunchCamp');
   if (!target) return;
 
   if (target.id === 'sv2') return handleWalkinSubmit();
@@ -1758,6 +1779,10 @@ document.addEventListener('click', async (e) => {
   if (target.id === 'btnPrintReceipt') { window.print(); return; }
   if (target.id === 'btnWaReceipt' && state.lastReceipt) {
     window.open(buildWaUrl(state.lastReceipt.client_phone, buildReceiptWaText(state.lastReceipt, state.settings)), '_blank', 'noopener');
+    return;
+  }
+  if (target.id === 'btnVoidReceipt' && state.lastReceipt) {
+    openVoidBillModal(state.lastReceipt);
     return;
   }
   if (target.id === 'btnConfirmReset') {
@@ -1994,6 +2019,24 @@ document.addEventListener('click', async (e) => {
         state.reports = fresh;
         render(!cached);
       }
+    } catch (err) {
+      toast(err.message);
+    }
+    return;
+  }
+  if (action === 'export-gst-csv') {
+    try {
+      const csv = await api.exportGstCsv(state.reportPeriod);
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `salondesk-gst-audit-${state.reportPeriod}-${todayIso()}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast('GST Audit CSV exported');
     } catch (err) {
       toast(err.message);
     }
@@ -2291,6 +2334,43 @@ document.addEventListener('submit', async (e) => {
       toast(err.message);
     }
   }
+
+  if (form.id === 'voidBillForm') {
+    e.preventDefault();
+    const aptId = form.dataset.id;
+    const pinInp = $('#voidPin');
+    if (pinInp && pinInp.value.trim()) {
+      setSessionOwnerPin(pinInp.value.trim());
+    }
+    try {
+      await api.deleteAppointment(aptId);
+      invalidateClientCaches();
+      closeOverlay('formModal');
+      closeOverlay('receiptModal');
+      if (state.dashboard?.completedToday) {
+        const voided = state.dashboard.completedToday.find(x => x.id === aptId);
+        state.dashboard.completedToday = state.dashboard.completedToday.filter(x => x.id !== aptId);
+        if (voided) {
+          state.dashboard.todayRevenue = Math.max(0, Number(state.dashboard.todayRevenue || 0) - Number(voided.price || 0));
+          state.dashboard.completedCount = Math.max(0, Number(state.dashboard.completedCount || 0) - 1);
+        }
+      }
+      render(false);
+      toast('Bill voided & client ledger reconciled');
+      refreshDataForPage('dashboard', { force: true }).then(() => {
+        if (state.page === 'dashboard' && !document.querySelector('.modal-overlay:not([hidden]), .drawer-overlay:not([hidden])')) {
+          render(false);
+        }
+      }).catch(() => {});
+    } catch (err) {
+      if (err.code === 'PIN_REQUIRED') {
+        setSessionOwnerPin('');
+        toast('Invalid Owner PIN');
+      } else {
+        toast(err.message);
+      }
+    }
+  }
 });
 
 // Keyboard Accessibility: Safe Escape & Radiogroup Arrow Keys
@@ -2324,21 +2404,28 @@ window.addEventListener('hashchange', () => {
 });
 
 // Salon Login & Auth Management
+function openLoginModal() {
+  const loginModal = $('#loginModal');
+  if (loginModal) {
+    loginModal.hidden = false;
+    loginModal.classList.add('open');
+  }
+}
+
 function checkAuthAndPrompt() {
   const session = getSalonSession();
   if (!session.token) {
-    const loginModal = $('#loginModal');
-    if (loginModal) {
-      loginModal.hidden = false;
-      loginModal.classList.add('open');
-      const userInp = $('#loginUser');
-      if (userInp && !userInp.value) {
-        userInp.value = '8446451506';
-        $('#loginPass').value = 'genzee123';
-      }
-    }
+    openLoginModal();
+    return false;
   }
+  return true;
 }
+
+window.addEventListener('salondesk:auth-required', () => {
+  invalidateClientCaches();
+  _prewarmed = false;
+  openLoginModal();
+});
 
 const loginForm = $('#loginForm');
 if (loginForm) {
@@ -2354,7 +2441,7 @@ if (loginForm) {
       const password = $('#loginPass').value.trim();
       const res = await api.login(username, password);
       setSalonSession(res.salon, res.token);
-      toast(`Signed in as ${res.salon?.name || 'GENZEE Lounge'}`);
+      toast(`Signed in as ${res.salon?.name || 'SalonDesk'}`);
 
       const loginModal = $('#loginModal');
       if (loginModal) {
@@ -2391,16 +2478,24 @@ document.addEventListener('click', (e) => {
     clearSalonSession();
     invalidateClientCaches();
     _prewarmed = false;
+    state.dashboard = null;
+    state.clients = [];
+    state.services = [];
+    state.stylists = [];
+    state.reports = null;
+    state.campaigns = [];
+    _syncState.campaignsLoaded = false;
     toast('Logged out from salon');
-    const loginModal = $('#loginModal');
-    if (loginModal) {
-      loginModal.hidden = false;
-      loginModal.classList.add('open');
-    }
+    openLoginModal();
   }
 });
 
 // Boot Application
 const initialHash = (location.hash || '#dashboard').slice(1);
-checkAuthAndPrompt();
-navigate(NAV.some(([k]) => k === initialHash) ? initialHash : 'dashboard');
+const targetPage = NAV.some(([k]) => k === initialHash) ? initialHash : 'dashboard';
+if (checkAuthAndPrompt()) {
+  navigate(targetPage);
+} else {
+  state.page = targetPage;
+  render(false);
+}
