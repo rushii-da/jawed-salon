@@ -2510,11 +2510,29 @@ window.addEventListener('hashchange', () => {
 });
 
 // Salon Login & Auth Management
+const EYE_ON_SVG = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+const EYE_OFF_SVG = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+
 function openLoginModal() {
   const loginModal = $('#loginModal');
+  const errBox = $('#loginError');
+  const passInput = $('#loginPass');
+  const toggleBtn = $('#btnTogglePass');
+  if (errBox) {
+    errBox.textContent = '';
+    errBox.style.display = 'none';
+  }
+  if (passInput) passInput.type = 'password';
+  if (toggleBtn) {
+    toggleBtn.setAttribute('aria-pressed', 'false');
+    toggleBtn.setAttribute('aria-label', 'Show password');
+    toggleBtn.innerHTML = EYE_ON_SVG;
+  }
   if (loginModal) {
     loginModal.hidden = false;
     loginModal.classList.add('open');
+    const userInput = $('#loginUser');
+    if (userInput) userInput.focus();
   }
 }
 
@@ -2533,14 +2551,37 @@ window.addEventListener('salondesk:auth-required', () => {
   openLoginModal();
 });
 
+const togglePassBtn = $('#btnTogglePass');
+if (togglePassBtn) {
+  togglePassBtn.addEventListener('click', () => {
+    const passInput = $('#loginPass');
+    if (!passInput) return;
+    const showing = passInput.type === 'text';
+    passInput.type = showing ? 'password' : 'text';
+    togglePassBtn.setAttribute('aria-pressed', showing ? 'false' : 'true');
+    togglePassBtn.setAttribute('aria-label', showing ? 'Show password' : 'Hide password');
+    togglePassBtn.innerHTML = showing ? EYE_ON_SVG : EYE_OFF_SVG;
+  });
+}
+
 const loginForm = $('#loginForm');
 if (loginForm) {
+  const clearLoginErr = () => {
+    const errBox = $('#loginError');
+    if (errBox && errBox.style.display !== 'none') errBox.style.display = 'none';
+  };
+  $('#loginUser')?.addEventListener('input', clearLoginErr);
+  $('#loginPass')?.addEventListener('input', clearLoginErr);
+
   loginForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     const btn = $('#btnLoginSubmit');
     const errBox = $('#loginError');
     if (errBox) errBox.style.display = 'none';
-    if (btn) btn.disabled = true;
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = 'Signing in…';
+    }
 
     try {
       const username = $('#loginUser').value.trim();
@@ -2573,8 +2614,12 @@ if (loginForm) {
         errBox.textContent = err.message || 'Login failed. Please check your credentials.';
         errBox.style.display = 'block';
       }
+      $('#loginPass')?.focus();
     } finally {
-      if (btn) btn.disabled = false;
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = 'Sign In to Dashboard';
+      }
     }
   });
 }

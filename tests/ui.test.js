@@ -42,6 +42,7 @@ describe('Jawed Salon OS — UI Integrity, Accessibility & XSS Safety', () => {
     assert.ok(appJs.includes("e.key === 'ArrowRight'"), 'Radiogroups must support arrow-key keyboard navigation');
     assert.ok(appJs.includes('ratingBadge(st.live_rating)'), 'All stylist cards must render consistent ratingBadge instead of hiding rating behind Top Producer');
     assert.ok(appJs.includes('settingsStylistsCard') && appJs.includes('open-edit-stylist') && appJs.includes('delete-stylist'), 'Settings must allow adding, editing, and archiving stylists');
+    assert.ok(!html.includes('class="inp"') && !html.includes('var(--danger)') && html.includes('class="in"') && html.includes('id="btnTogglePass"'), 'Sign-in modal must use valid .in/.alert-box styles and password visibility toggle');
   });
 
   it('uses SQLite REST API exclusively without localStorage business state split-brain', () => {
