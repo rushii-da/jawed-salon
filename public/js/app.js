@@ -5,7 +5,7 @@ import {
 import {
   COL, ICO, WA_SVG, STAR_SVG,
   escapeHtml, inr, normalizePhone, formatPhone, todayIso, formatDisplayDate,
-  av, chip, buildWaUrl, buildReceiptWaText, buildBookingWaText, parseServicesJson
+  av, chip, formatRating, ratingBadge, buildWaUrl, buildReceiptWaText, buildBookingWaText, parseServicesJson
 } from './utils.js';
 
 const $ = (s) => document.querySelector(s);
@@ -417,8 +417,8 @@ function renderDashboardView() {
           <div class="ln">
             ${av(x.name, idx, 38)}
             <div class="gr">
-              <b>${escapeHtml(x.name)}</b>
-              <small>${x.clients_served} ${x.clients_served === 1 ? 'bill' : 'bills'} · ${x.live_rating} ${STAR_SVG}</small>
+              <b title="${escapeHtml(x.name)}">${escapeHtml(x.name)}</b>
+              <small>${x.clients_served} ${x.clients_served === 1 ? 'bill' : 'bills'} · <span class="rating-inline tab-num">${STAR_SVG}<span>${escapeHtml(formatRating(x.live_rating))}</span></span></small>
             </div>
             <b class="tab-num" style="font-size:15px">${inr(x.revenue)}</b>
           </div>
@@ -815,15 +815,16 @@ function renderStylistsView() {
       const maxWk = Math.max(...(st.weekly_counts || [1]), 1);
       return `
         <div class="card fx" style="gap:14px">
-          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
-            <div style="display:flex;align-items:center;gap:10px;min-width:0">
-              ${av(st.name, idx, 42)}
-              <div class="gr">
-                <b style="font-size:15.5px">${escapeHtml(st.name)}</b>
-                <small>${escapeHtml(st.role)}</small>
-              </div>
+          <div class="stylist-head">
+            ${av(st.name, idx, 42)}
+            <div class="gr">
+              <div class="stylist-name" title="${escapeHtml(st.name)}">${escapeHtml(st.name)}</div>
+              <small class="stylist-role" title="${escapeHtml(st.role)}">${escapeHtml(st.role)}</small>
             </div>
-            ${idx === 0 && st.revenue > 0 ? chip('Top Producer', 'lime') : chip(`${st.live_rating} ★`)}
+          </div>
+          <div class="stylist-meta">
+            ${ratingBadge(st.live_rating)}
+            ${idx === 0 && st.revenue > 0 ? chip('Top Producer', 'lime') : ''}
           </div>
 
           <div style="background:var(--soft);border-radius:16px;padding:12px 14px;display:flex;flex-direction:column;gap:8px">

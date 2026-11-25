@@ -67,6 +67,17 @@ export function chip(text, cls = '') {
   return `<span class="chip ${cls}">${escapeHtml(text)}</span>`;
 }
 
+export function formatRating(val) {
+  const num = Number(val);
+  const safe = Number.isFinite(num) && num > 0 ? num : 4.9;
+  return safe.toFixed(2);
+}
+
+export function ratingBadge(val) {
+  const txt = formatRating(val);
+  return `<span class="chip rating-pill tab-num" aria-label="Rating ${escapeHtml(txt)} out of 5">${STAR_SVG}<span>${escapeHtml(txt)}</span></span>`;
+}
+
 export function buildWaUrl(phone, message) {
   const p = normalizePhone(phone);
   return `https://wa.me/91${p}?text=${encodeURIComponent(message)}`;

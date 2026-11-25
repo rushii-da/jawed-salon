@@ -36,9 +36,11 @@ describe('Jawed Salon OS — UI Integrity, Accessibility & XSS Safety', () => {
 
     assert.ok(css.includes('font-variant-numeric: tabular-nums'), 'Missing tabular-nums');
     assert.ok(css.includes('outline: 2px solid var(--ring)'), 'Missing WCAG focus outline');
+    assert.ok(css.includes('.rating-pill') && css.includes('.stylist-meta'), 'Missing aligned stylist card & rating pill CSS');
     assert.ok(css.includes(':not(#receiptSlip)'), 'Thermal print CSS must hide all non-receipt UI chrome');
     assert.ok(appJs.includes('<fieldset class="fg">'), 'Chip groups must use accessible fieldsets');
     assert.ok(appJs.includes("e.key === 'ArrowRight'"), 'Radiogroups must support arrow-key keyboard navigation');
+    assert.ok(appJs.includes('ratingBadge(st.live_rating)'), 'All stylist cards must render consistent ratingBadge instead of hiding rating behind Top Producer');
   });
 
   it('uses SQLite REST API exclusively without localStorage business state split-brain', () => {
