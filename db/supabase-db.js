@@ -586,15 +586,18 @@ class SupabaseSalonDatabase {
       .eq('salon_id', salonId)
       .like('invoice_no', `${prefix}%`)
       .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .limit(100);
 
-    let seq = 101;
-    if (data && data.invoice_no) {
-      const match = data.invoice_no.match(/INV-\d+-(\d+)/);
-      if (match) seq = parseInt(match[1], 10) + 1;
+    let maxSeq = 100;
+    for (const row of data || []) {
+      const match = String(row.invoice_no || '').match(/INV-\d+-(\d+)/);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (num > maxSeq) maxSeq = num;
+      }
     }
 
+    let seq = maxSeq + 1;
     let candidate = `${prefix}${seq}`;
     while (await this.client.from('appointments').select('id').eq('salon_id', salonId).eq('invoice_no', candidate).maybeSingle().then(r => r.data)) {
       seq += 1;
