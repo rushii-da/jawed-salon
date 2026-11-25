@@ -1,6 +1,7 @@
 const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
+const zlib = require('node:zlib');
 const { SalonDatabase, DB_PATH, ConflictError, ValidationError } = require('./db/database');
 const { SupabaseSalonDatabase } = require('./db/supabase-db');
 
@@ -39,12 +40,33 @@ function getSecurityHeaders(extra = {}) {
   return headers;
 }
 
+function sendCompressed(res, statusCode, headers, payload, headOnly = false) {
+  const buf = Buffer.isBuffer(payload) ? payload : Buffer.from(String(payload ?? ''), 'utf8');
+  if (!headOnly && res._acceptsGzip && buf.length >= 1024) {
+    zlib.gzip(buf, { level: 6 }, (err, gz) => {
+      if (err) {
+        res.writeHead(statusCode, getSecurityHeaders(headers));
+        res.end(buf);
+        return;
+      }
+      res.writeHead(statusCode, getSecurityHeaders({
+        ...headers,
+        'Content-Encoding': 'gzip',
+        'Vary': headers.Vary ? `${headers.Vary}, Accept-Encoding` : 'Accept-Encoding'
+      }));
+      res.end(gz);
+    });
+    return;
+  }
+  res.writeHead(statusCode, getSecurityHeaders(headers));
+  res.end(headOnly ? undefined : buf);
+}
+
 function sendJson(res, statusCode, data) {
-  res.writeHead(statusCode, getSecurityHeaders({
+  sendCompressed(res, statusCode, {
     'Content-Type': 'application/json; charset=utf-8',
     'Cache-Control': 'no-store'
-  }));
-  res.end(JSON.stringify(data));
+  }, JSON.stringify(data));
 }
 
 function sendError(res, statusCode, message, code = 'ERROR') {
@@ -103,6 +125,7 @@ function createAppServer(dbOption = null) {
   const isSupabase = db instanceof SupabaseSalonDatabase;
 
   const server = http.createServer(async (req, res) => {
+    res._acceptsGzip = /\bgzip\b/i.test(String(req.headers['accept-encoding'] || ''));
     try {
       // Handle CORS preflight cleanly
       if (req.method === 'OPTIONS') {
@@ -378,8 +401,7 @@ function createAppServer(dbOption = null) {
               res.end('500 Internal Server Error');
               return;
             }
-            res.writeHead(200, getSecurityHeaders({ 'Content-Type': 'text/html; charset=utf-8' }));
-            res.end(req.method === 'HEAD' ? undefined : content);
+            sendCompressed(res, 200, { 'Content-Type': 'text/html; charset=utf-8' }, content, req.method === 'HEAD');
           });
           return;
         }
@@ -392,11 +414,10 @@ function createAppServer(dbOption = null) {
             res.end('500 Internal Server Error');
             return;
           }
-          res.writeHead(200, getSecurityHeaders({
+          sendCompressed(res, 200, {
             'Content-Type': contentType,
             'Cache-Control': ext === '.html' ? 'no-cache' : 'public, max-age=300'
-          }));
-          res.end(req.method === 'HEAD' ? undefined : content);
+          }, content, req.method === 'HEAD');
         });
       });
     } catch (err) {

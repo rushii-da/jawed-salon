@@ -122,6 +122,9 @@ function closeOverlay(id) {
     state.lastFocusedEl.focus();
     state.lastFocusedEl = null;
   }
+  if (id === 'receiptModal' && state.page === 'dashboard') {
+    render(false);
+  }
   return true;
 }
 
@@ -1296,26 +1299,117 @@ function openRescheduleModal(apt) {
   openOverlay('formModal');
 }
 
-// ===================== DATA LOADING & RENDERING =====================
-async function refreshDataForPage(page = state.page) {
-  const [services, stylists, settings, clients] = await Promise.all([
+// ===================== DATA LOADING & RENDERING (SWR + NON-BLOCKING) =====================
+let _navSeq = 0;
+let _prewarmed = false;
+const _syncState = {
+  coreAt: 0,
+  dashboardAt: 0,
+  clientsAt: 0,
+  campaignsAt: 0,
+  reportsCache: {},
+  stylistsCache: {},
+  campaignsLoaded: false
+};
+
+function hasPageData(page) {
+  switch (page) {
+    case 'dashboard': return Boolean(state.dashboard);
+    case 'walkin':
+    case 'appointment':
+    case 'settings': return state.services.length > 0 && state.stylists.length > 0;
+    case 'customers': return state.clients.length > 0;
+    case 'stylists': return Boolean(_syncState.stylistsCache[state.stylistPeriod]) || state.stylists.length > 0;
+    case 'reports': return Boolean(_syncState.reportsCache[state.reportPeriod]);
+    case 'campaigns': return _syncState.campaignsLoaded;
+    default: return Boolean(state.dashboard);
+  }
+}
+
+function invalidateClientCaches() {
+  _syncState.coreAt = 0;
+  _syncState.dashboardAt = 0;
+  _syncState.clientsAt = 0;
+  _syncState.campaignsAt = 0;
+  _syncState.reportsCache = {};
+  _syncState.stylistsCache = {};
+}
+
+async function ensureCoreData(force = false) {
+  const fresh = !force && state.services.length > 0 && state.stylists.length > 0 && (Date.now() - _syncState.coreAt < 60_000);
+  if (fresh) return;
+  const [services, stylists, settings] = await Promise.all([
     api.getServices(),
-    api.getStylists(state.stylistPeriod),
-    api.getSettings(),
-    api.getClients()
+    state.stylists.length ? Promise.resolve(state.stylists) : api.getStylists(state.stylistPeriod),
+    api.getSettings()
   ]);
   state.services = services;
   state.stylists = stylists;
   state.settings = settings;
-  state.clients = clients;
+  _syncState.coreAt = Date.now();
+}
 
+async function refreshDataForPage(page = state.page, { force = false } = {}) {
   if (page === 'dashboard') {
-    state.dashboard = await api.getDashboard();
+    const tasks = [api.getDashboard()];
+    if (force || state.services.length === 0) tasks.push(api.getServices());
+    const [dash, services] = await Promise.all(tasks);
+    state.dashboard = dash;
+    if (dash?.settings) state.settings = dash.settings;
+    if (dash?.stylistPerf && state.stylists.length === 0) state.stylists = dash.stylistPerf;
+    if (services) state.services = services;
+    _syncState.dashboardAt = Date.now();
+    _syncState.coreAt = Date.now();
+  } else if (page === 'walkin' || page === 'appointment' || page === 'settings') {
+    await ensureCoreData(force);
+  } else if (page === 'customers') {
+    const [clients] = await Promise.all([
+      api.getClients(),
+      ensureCoreData(false)
+    ]);
+    state.clients = clients;
+    _syncState.clientsAt = Date.now();
+  } else if (page === 'stylists') {
+    const stylists = await api.getStylists(state.stylistPeriod);
+    state.stylists = stylists;
+    _syncState.stylistsCache[state.stylistPeriod] = stylists;
   } else if (page === 'reports') {
-    state.reports = await api.getReports(state.reportPeriod);
+    const reports = await api.getReports(state.reportPeriod);
+    state.reports = reports;
+    _syncState.reportsCache[state.reportPeriod] = reports;
   } else if (page === 'campaigns') {
-    state.campaigns = await api.getCampaigns();
+    const tasks = [api.getCampaigns()];
+    if (force || state.clients.length === 0) tasks.push(api.getClients());
+    const [campaigns, clients] = await Promise.all(tasks);
+    state.campaigns = campaigns;
+    if (clients) {
+      state.clients = clients;
+      _syncState.clientsAt = Date.now();
+    }
+    _syncState.campaignsLoaded = true;
+    _syncState.campaignsAt = Date.now();
   }
+}
+
+function prewarmBackgroundTabs() {
+  if (_prewarmed || !isSalonLoggedIn()) return;
+  _prewarmed = true;
+  setTimeout(async () => {
+    try {
+      const [clients, reports] = await Promise.all([
+        state.clients.length ? Promise.resolve(state.clients) : api.getClients(),
+        _syncState.reportsCache[state.reportPeriod] ? Promise.resolve(_syncState.reportsCache[state.reportPeriod]) : api.getReports(state.reportPeriod)
+      ]);
+      if (clients && !state.clients.length) {
+        state.clients = clients;
+        _syncState.clientsAt = Date.now();
+      }
+      if (reports) {
+        _syncState.reportsCache[state.reportPeriod] = reports;
+        if (!state.reports) state.reports = reports;
+      }
+    } catch (_) {}
+  }, 300);
 }
 
 function animateDigits(container) {
@@ -1368,19 +1462,62 @@ function render(animate = false) {
   }
 }
 
+function applyOptimisticSettlement(savedApt, usedPaymentMode, paymentSplit, settlingId) {
+  const d = state.dashboard;
+  if (!d || !savedApt) return;
+  const price = Number(savedApt.price || 0);
+  d.todayRevenue = Number(d.todayRevenue || 0) + price;
+  d.completedCount = Number(d.completedCount || 0) + 1;
+  d.avgTicket = d.completedCount ? Math.round(d.todayRevenue / d.completedCount) : 0;
+  d.completedToday = [savedApt, ...(d.completedToday || [])];
+  if (settlingId) {
+    d.activeQueue = (d.activeQueue || []).filter(x => x.id !== settlingId);
+    d.upcomingFuture = (d.upcomingFuture || []).filter(x => x.id !== settlingId);
+  }
+  d.paymentSplit = d.paymentSplit || { UPI: 0, Card: 0, Cash: 0 };
+  if (usedPaymentMode === 'Split') {
+    d.paymentSplit.UPI = Number(d.paymentSplit.UPI || 0) + Number(paymentSplit.UPI || 0);
+    d.paymentSplit.Cash = Number(d.paymentSplit.Cash || 0) + Number(paymentSplit.Cash || 0);
+  } else if (d.paymentSplit[usedPaymentMode] !== undefined) {
+    d.paymentSplit[usedPaymentMode] = Number(d.paymentSplit[usedPaymentMode] || 0) + price;
+  }
+}
+
 async function navigate(page, { forceRefresh = true } = {}) {
   const valid = NAV.some(([k]) => k === page) ? page : 'dashboard';
+  const seq = ++_navSeq;
   state.page = valid;
   history.replaceState(null, '', '#' + valid);
-  if (forceRefresh) {
-    try {
-      await refreshDataForPage(valid);
-    } catch (err) {
-      toast(err.message);
-    }
+
+  if (valid === 'reports' && _syncState.reportsCache[state.reportPeriod]) {
+    state.reports = _syncState.reportsCache[state.reportPeriod];
+  } else if (valid === 'stylists' && _syncState.stylistsCache[state.stylistPeriod]) {
+    state.stylists = _syncState.stylistsCache[state.stylistPeriod];
   }
+
+  const hadData = hasPageData(valid);
+  // Instant 0ms panel transition before any network round-trips
   render(true);
   window.scrollTo({ top: 0, behavior: 'smooth' });
+
+  if (!forceRefresh) return;
+
+  // Walk-in / New Appointment / Settings only need lightweight core data (no heavy analytics wait)
+  const isFormTab = valid === 'walkin' || valid === 'appointment' || valid === 'settings';
+  if (isFormTab && hadData && (Date.now() - _syncState.coreAt < 60_000)) {
+    return;
+  }
+
+  try {
+    await refreshDataForPage(valid);
+    if (seq !== _navSeq || state.page !== valid) return;
+    if (document.querySelector('.modal-overlay:not([hidden]), .drawer-overlay:not([hidden])')) return;
+    if (isFormTab && document.activeElement?.closest('input, textarea, select')) return;
+    render(!hadData);
+    if (valid === 'dashboard') prewarmBackgroundTabs();
+  } catch (err) {
+    if (seq === _navSeq) toast(err.message);
+  }
 }
 
 // ===================== EVENT HANDLERS (100% DELEGATED, ZERO INLINE JS) =====================
@@ -1426,11 +1563,19 @@ async function handleWalkinSubmit() {
   const paymentSplit = usedPaymentMode === 'Split'
     ? { UPI: Number(w.splitUpi || 0), Cash: Number(w.splitCash || 0) }
     : {};
+  const settlingId = w.settlingId;
+
+  const submitBtn = $('#sv2');
+  const prevBtnHtml = submitBtn ? submitBtn.innerHTML : '';
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Settling Bill...';
+  }
 
   try {
     let savedApt;
-    if (w.settlingId) {
-      savedApt = await api.updateAppointment(w.settlingId, {
+    if (settlingId) {
+      savedApt = await api.updateAppointment(settlingId, {
         status: 'Completed',
         stylist_name: w.stylistName,
         subtotal: calc.subtotal,
@@ -1476,11 +1621,27 @@ async function handleWalkinSubmit() {
       lookupClient: null
     };
 
+    invalidateClientCaches();
+    applyOptimisticSettlement(savedApt, usedPaymentMode, paymentSplit, settlingId);
+
+    // Switch dashboard optimistically & show Done/Receipt modal IMMEDIATELY without waiting on heavy refresh
     toast(`Bill settled: ${inr(savedApt.price)} collected via ${usedPaymentMode}`);
-    await navigate('dashboard');
+    await navigate('dashboard', { forceRefresh: false });
     openReceiptModal(savedApt);
+
+    // Reconcile full dashboard + clients silently in background
+    refreshDataForPage('dashboard', { force: true }).then(() => {
+      if (state.page === 'dashboard' && !document.querySelector('.modal-overlay:not([hidden]), .drawer-overlay:not([hidden])')) {
+        render(false);
+      }
+    }).catch(() => {});
   } catch (err) {
     toast(err.message);
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = prevBtnHtml;
+    }
   }
 }
 
@@ -1549,6 +1710,7 @@ async function handleBookingSubmit(force = false) {
       sendWa: true,
       conflictError: ''
     };
+    invalidateClientCaches();
     toast(`Appointment confirmed for ${created.client_name} (${created.time})`);
     await navigate('dashboard');
   } catch (err) {
@@ -1687,11 +1849,25 @@ document.addEventListener('click', async (e) => {
 
   // Dashboard queue actions
   if (action === 'set-status') {
+    const newStatus = target.dataset.status;
     try {
-      await api.updateAppointment(id, { status: target.dataset.status });
-      toast(`Appointment marked ${target.dataset.status}`);
-      await refreshDataForPage('dashboard');
-      render(false);
+      await api.updateAppointment(id, { status: newStatus });
+      invalidateClientCaches();
+      if (state.dashboard?.activeQueue) {
+        if (newStatus === 'Cancelled' || newStatus === 'Completed') {
+          state.dashboard.activeQueue = state.dashboard.activeQueue.filter(x => x.id !== id);
+        } else {
+          const item = state.dashboard.activeQueue.find(x => x.id === id);
+          if (item) item.status = newStatus;
+        }
+        render(false);
+      }
+      toast(`Appointment marked ${newStatus}`);
+      refreshDataForPage('dashboard', { force: true }).then(() => {
+        if (state.page === 'dashboard' && !document.querySelector('.modal-overlay:not([hidden]), .drawer-overlay:not([hidden])')) {
+          render(false);
+        }
+      }).catch(() => {});
     } catch (err) {
       toast(err.message);
     }
@@ -1780,17 +1956,47 @@ document.addEventListener('click', async (e) => {
     return;
   }
 
-  // Stylists & Reports period toggles (animate updated charts & digits)
+  // Stylists & Reports period toggles (instant cache switch + silent background sync)
   if (action === 'stylist-period') {
     state.stylistPeriod = val;
-    state.stylists = await api.getStylists(val);
-    render(true);
+    const cached = _syncState.stylistsCache[val];
+    if (cached) {
+      state.stylists = cached;
+      render(true);
+    } else {
+      render(false);
+    }
+    try {
+      const fresh = await api.getStylists(val);
+      _syncState.stylistsCache[val] = fresh;
+      if (state.page === 'stylists' && state.stylistPeriod === val) {
+        state.stylists = fresh;
+        render(!cached);
+      }
+    } catch (err) {
+      toast(err.message);
+    }
     return;
   }
   if (action === 'report-period') {
     state.reportPeriod = val;
-    state.reports = await api.getReports(val);
-    render(true);
+    const cached = _syncState.reportsCache[val];
+    if (cached) {
+      state.reports = cached;
+      render(true);
+    } else {
+      render(false);
+    }
+    try {
+      const fresh = await api.getReports(val);
+      _syncState.reportsCache[val] = fresh;
+      if (state.page === 'reports' && state.reportPeriod === val) {
+        state.reports = fresh;
+        render(!cached);
+      }
+    } catch (err) {
+      toast(err.message);
+    }
     return;
   }
 
@@ -1810,6 +2016,7 @@ document.addEventListener('click', async (e) => {
   if (action === 'delete-service') {
     try {
       await api.deleteService(id);
+      invalidateClientCaches();
       state.services = await api.getServices();
       render(false);
       toast('Service archived');
@@ -1997,8 +2204,9 @@ document.addEventListener('submit', async (e) => {
     try {
       state.settings = await api.updateSettings(payload);
       if (newPin) setSessionOwnerPin(newPin);
+      invalidateClientCaches();
       render(false);
-      toast('Salon settings saved to SQLite');
+      toast('Salon settings saved cleanly');
     } catch (err) {
       toast(err.message);
     }
@@ -2016,8 +2224,10 @@ document.addEventListener('submit', async (e) => {
     try {
       if (form.dataset.id) await api.updateStylist(form.dataset.id, body);
       else await api.createStylist(body);
+      invalidateClientCaches();
       closeOverlay('formModal');
       state.stylists = await api.getStylists(state.stylistPeriod);
+      _syncState.stylistsCache[state.stylistPeriod] = state.stylists;
       render(false);
       toast(form.dataset.id ? 'Stylist updated' : 'Stylist added');
     } catch (err) {
@@ -2037,6 +2247,7 @@ document.addEventListener('submit', async (e) => {
     try {
       if (form.dataset.id) await api.updateService(form.dataset.id, body);
       else await api.createService(body);
+      invalidateClientCaches();
       closeOverlay('formModal');
       state.services = await api.getServices();
       render(false);
@@ -2055,8 +2266,9 @@ document.addEventListener('submit', async (e) => {
         time: fd.get('time'),
         stylist_name: fd.get('stylist_name')
       });
+      invalidateClientCaches();
       closeOverlay('formModal');
-      await refreshDataForPage('dashboard');
+      await refreshDataForPage('dashboard', { force: true });
       render(false);
       toast('Appointment rescheduled cleanly');
     } catch (err) {
@@ -2071,6 +2283,7 @@ document.addEventListener('submit', async (e) => {
         formula_notes: $('#cdFormula').value,
         opted_in: $('#cdOptIn').checked
       });
+      invalidateClientCaches();
       state.clients = await api.getClients();
       render(false);
       toast('Client formula notes & opt-in saved');
@@ -2149,8 +2362,19 @@ if (loginForm) {
         loginModal.classList.remove('open');
       }
 
-      await refreshDataForPage(state.page);
+      invalidateClientCaches();
+      _prewarmed = false;
+      state.dashboard = null;
+      state.clients = [];
+      state.services = [];
+      state.stylists = [];
+      state.reports = null;
+      state.campaigns = [];
+      _syncState.campaignsLoaded = false;
+
+      await refreshDataForPage(state.page, { force: true });
       render(true);
+      prewarmBackgroundTabs();
     } catch (err) {
       if (errBox) {
         errBox.textContent = err.message || 'Login failed. Please check your credentials.';
@@ -2165,6 +2389,8 @@ if (loginForm) {
 document.addEventListener('click', (e) => {
   if (e.target.closest('#btnLogout')) {
     clearSalonSession();
+    invalidateClientCaches();
+    _prewarmed = false;
     toast('Logged out from salon');
     const loginModal = $('#loginModal');
     if (loginModal) {
@@ -2176,5 +2402,5 @@ document.addEventListener('click', (e) => {
 
 // Boot Application
 const initialHash = (location.hash || '#dashboard').slice(1);
-navigate(NAV.some(([k]) => k === initialHash) ? initialHash : 'dashboard');
 checkAuthAndPrompt();
+navigate(NAV.some(([k]) => k === initialHash) ? initialHash : 'dashboard');

@@ -93,6 +93,42 @@ class SupabaseSalonDatabase {
     this.client = createClient(url, key, {
       auth: { persistSession: false }
     });
+    this._cache = new Map();
+    this._inflight = new Map();
+    this._cacheTtlMs = 30_000;
+  }
+
+  /**
+   * Read-through cache + in-flight request deduplication scoped by salonId.
+   */
+  async cached(key, fn) {
+    const hit = this._cache.get(key);
+    if (hit && Date.now() < hit.expiresAt) {
+      return hit.value;
+    }
+    if (this._inflight.has(key)) {
+      return this._inflight.get(key);
+    }
+    const promise = (async () => {
+      try {
+        const value = await fn();
+        this._cache.set(key, { value, expiresAt: Date.now() + this._cacheTtlMs });
+        return value;
+      } finally {
+        this._inflight.delete(key);
+      }
+    })();
+    this._inflight.set(key, promise);
+    return promise;
+  }
+
+  invalidateCache(salonId) {
+    const marker = `:${salonId}:`;
+    for (const k of this._cache.keys()) {
+      if (k.includes(marker) || k.endsWith(`:${salonId}`)) {
+        this._cache.delete(k);
+      }
+    }
   }
 
   /**
@@ -142,14 +178,16 @@ class SupabaseSalonDatabase {
   }
 
   async getSalon(salonId) {
-    const { data, error } = await this.client
-      .from('salons')
-      .select('*')
-      .eq('id', salonId)
-      .maybeSingle();
-    if (error || !data) return null;
-    const { password_hash, ...safe } = data;
-    return safe;
+    return this.cached(`salon:${salonId}`, async () => {
+      const { data, error } = await this.client
+        .from('salons')
+        .select('*')
+        .eq('id', salonId)
+        .maybeSingle();
+      if (error || !data) return null;
+      const { password_hash, ...safe } = data;
+      return safe;
+    });
   }
 
   async getSettings(salonId) {
@@ -184,21 +222,24 @@ class SupabaseSalonDatabase {
       .update(patch)
       .eq('id', salonId);
     if (error) throw new Error(error.message);
+    this.invalidateCache(salonId);
     return this.getSettings(salonId);
   }
 
   // ===================== SERVICES =====================
   async getServices(salonId, includeInactive = false) {
-    let q = this.client
-      .from('services')
-      .select('*')
-      .eq('salon_id', salonId);
-    if (!includeInactive) {
-      q = q.eq('active', 1);
-    }
-    const { data, error } = await q.order('popular', { ascending: false }).order('price', { ascending: true });
-    if (error) throw new Error(error.message);
-    return data || [];
+    return this.cached(`services:${salonId}:${includeInactive ? 1 : 0}`, async () => {
+      let q = this.client
+        .from('services')
+        .select('*')
+        .eq('salon_id', salonId);
+      if (!includeInactive) {
+        q = q.eq('active', 1);
+      }
+      const { data, error } = await q.order('popular', { ascending: false }).order('price', { ascending: true });
+      if (error) throw new Error(error.message);
+      return data || [];
+    });
   }
 
   async createService(salonId, payload) {
@@ -227,6 +268,7 @@ class SupabaseSalonDatabase {
       .select()
       .single();
     if (error) throw new Error(error.message);
+    this.invalidateCache(salonId);
     return data;
   }
 
@@ -255,6 +297,7 @@ class SupabaseSalonDatabase {
       .select()
       .maybeSingle();
     if (error) throw new Error(error.message);
+    this.invalidateCache(salonId);
     return data;
   }
 
@@ -264,51 +307,19 @@ class SupabaseSalonDatabase {
       .update({ active: 0 })
       .eq('salon_id', salonId)
       .eq('id', id);
+    if (!error) this.invalidateCache(salonId);
     return !error;
   }
 
   // ===================== STYLISTS =====================
-  async getStylists(salonId, period = 'month', opts = {}) {
-    const today = getLocalIsoDate(0);
-    const startDate = period === 'today' ? today : period === 'week' ? getLocalIsoDate(-6) : getLocalIsoDate(-29);
-    const weekStart = getLocalIsoDate(-6);
-    const fetchStart = startDate < weekStart ? startDate : weekStart;
-
-    const [stylistsRes, apts, clients] = await Promise.all([
-      this.client
-        .from('stylists')
-        .select('*')
-        .eq('salon_id', salonId)
-        .eq('active', 1)
-        .order('rating', { ascending: false }),
-      this.fetchAll(c =>
-        c.from('appointments')
-          .select('stylist_id, stylist_name, price, rating, client_phone, date')
-          .eq('salon_id', salonId)
-          .eq('status', 'Completed')
-          .gte('date', fetchStart)
-          .lte('date', today)
-      ),
-      opts.allClients
-        ? Promise.resolve(opts.allClients)
-        : this.fetchAll(c =>
-            c.from('clients')
-              .select('phone, visits')
-              .eq('salon_id', salonId)
-          )
-    ]);
-
-    if (stylistsRes.error) throw new Error(stylistsRes.error.message);
-    const stylists = stylistsRes.data || [];
-
+  computeStylistsMetrics(stylists, allApts, clients, period, startDate, today) {
     const last7Dates = [];
     for (let i = -6; i <= 0; i++) last7Dates.push(getLocalIsoDate(i));
 
     const clientVisitsMap = new Map((clients || []).map(c => [c.phone, Number(c.visits || 0)]));
-    const allApts = apts || [];
-    const periodApts = allApts.filter(a => a.date >= startDate && a.date <= today);
+    const periodApts = (allApts || []).filter(a => a.date >= startDate && a.date <= today);
 
-    return stylists.map(st => {
+    return (stylists || []).map(st => {
       const mine = periodApts.filter(a => a.stylist_id === st.id || a.stylist_name === st.name);
       const revenue = mine.reduce((s, a) => s + Number(a.price || 0), 0);
       const clientsServed = mine.length;
@@ -324,7 +335,7 @@ class SupabaseSalonDatabase {
       const retentionPct = uniquePhones.length ? Math.round((repeatCount / uniquePhones.length) * 100) : 0;
 
       const weeklyCounts = last7Dates.map(d =>
-        allApts.filter(a => (a.stylist_id === st.id || a.stylist_name === st.name) && a.date === d).length
+        (allApts || []).filter(a => (a.stylist_id === st.id || a.stylist_name === st.name) && a.date === d).length
       );
 
       return {
@@ -339,6 +350,36 @@ class SupabaseSalonDatabase {
         weekly_counts: weeklyCounts
       };
     }).sort((a, b) => b.revenue - a.revenue);
+  }
+
+  async getStylists(salonId, period = 'month') {
+    return this.cached(`stylists:${salonId}:${period}`, async () => {
+      const today = getLocalIsoDate(0);
+      const startDate = period === 'today' ? today : period === 'week' ? getLocalIsoDate(-6) : getLocalIsoDate(-29);
+      const weekStart = getLocalIsoDate(-6);
+      const fetchStart = startDate < weekStart ? startDate : weekStart;
+
+      const [stylistsRes, apts, clients] = await Promise.all([
+        this.client
+          .from('stylists')
+          .select('*')
+          .eq('salon_id', salonId)
+          .eq('active', 1)
+          .order('rating', { ascending: false }),
+        this.fetchAll(c =>
+          c.from('appointments')
+            .select('stylist_id, stylist_name, price, rating, client_phone, date')
+            .eq('salon_id', salonId)
+            .eq('status', 'Completed')
+            .gte('date', fetchStart)
+            .lte('date', today)
+        ),
+        this.getClients(salonId)
+      ]);
+
+      if (stylistsRes.error) throw new Error(stylistsRes.error.message);
+      return this.computeStylistsMetrics(stylistsRes.data, apts, clients, period, startDate, today);
+    });
   }
 
   async createStylist(salonId, payload) {
@@ -370,6 +411,7 @@ class SupabaseSalonDatabase {
       .select()
       .single();
     if (error) throw new Error(error.message);
+    this.invalidateCache(salonId);
     return data;
   }
 
@@ -389,6 +431,7 @@ class SupabaseSalonDatabase {
       .select()
       .maybeSingle();
     if (error) throw new Error(error.message);
+    this.invalidateCache(salonId);
     return data;
   }
 
@@ -404,14 +447,16 @@ class SupabaseSalonDatabase {
   }
 
   async getClients(salonId, filters = {}) {
-    const data = await this.fetchAll(c =>
-      c.from('clients')
-        .select('*')
-        .eq('salon_id', salonId)
-        .order('last_visit_at', { ascending: false })
-    );
+    let list = await this.cached(`clients:${salonId}`, async () => {
+      const data = await this.fetchAll(c =>
+        c.from('clients')
+          .select('*')
+          .eq('salon_id', salonId)
+          .order('last_visit_at', { ascending: false })
+      );
+      return (data || []).map(r => this.hydrateClientRow(r));
+    });
 
-    let list = (data || []).map(r => this.hydrateClientRow(r));
     if (filters.search) {
       const q = String(filters.search).trim().toLowerCase();
       const qDigits = q.replace(/\D/g, '');
@@ -471,12 +516,13 @@ class SupabaseSalonDatabase {
       .eq('salon_id', salonId)
       .eq('id', id);
     if (error) throw new Error(error.message);
+    this.invalidateCache(salonId);
     return this.getClientById(salonId, id);
   }
 
-  async upsertClientRecord(salonId, { name, phone, preferredStylist, serviceName, amount, date, creditVisit, rating }) {
+  async upsertClientRecord(salonId, { name, phone, preferredStylist, serviceName, amount, date, creditVisit, rating, existingClient = undefined }) {
     const normPhone = normalizePhone(phone);
-    const existing = await this.getClientByPhone(salonId, normPhone);
+    const existing = existingClient !== undefined ? existingClient : await this.getClientByPhone(salonId, normPhone);
 
     if (existing) {
       if (creditVisit) {
@@ -503,6 +549,7 @@ class SupabaseSalonDatabase {
           })
           .eq('salon_id', salonId)
           .eq('id', existing.id);
+        this.invalidateCache(salonId);
       }
       return existing.id;
     }
@@ -528,6 +575,7 @@ class SupabaseSalonDatabase {
         last_service: serviceName || '',
         last_visit_at: lastVisitAt
       });
+    this.invalidateCache(salonId);
     return newId;
   }
 
@@ -577,7 +625,7 @@ class SupabaseSalonDatabase {
     return data || null;
   }
 
-  async nextInvoiceNo(salonId) {
+  async nextInvoiceSeq(salonId) {
     const year = new Date().getFullYear();
     const prefix = `INV-${year}-`;
     const { data } = await this.client
@@ -596,14 +644,12 @@ class SupabaseSalonDatabase {
         if (num > maxSeq) maxSeq = num;
       }
     }
+    return { prefix, seq: maxSeq + 1 };
+  }
 
-    let seq = maxSeq + 1;
-    let candidate = `${prefix}${seq}`;
-    while (await this.client.from('appointments').select('id').eq('salon_id', salonId).eq('invoice_no', candidate).maybeSingle().then(r => r.data)) {
-      seq += 1;
-      candidate = `${prefix}${seq}`;
-    }
-    return candidate;
+  async nextInvoiceNo(salonId) {
+    const { prefix, seq } = await this.nextInvoiceSeq(salonId);
+    return `${prefix}${seq}`;
   }
 
   async createAppointment(salonId, payload) {
@@ -632,14 +678,6 @@ class SupabaseSalonDatabase {
     const time = String(payload.time || new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })).trim();
     const stylistName = String(payload.stylist_name || payload.stylist || 'Rahul (Creative Director)').trim();
 
-    // Prevent double booking
-    if (ACTIVE_BOOKING_STATUSES.includes(status) && !payload.force) {
-      const conflict = await this.checkStylistConflict(salonId, stylistName, date, time);
-      if (conflict) {
-        throw new ConflictError(`${stylistName} already has an appointment with ${conflict.client_name} at ${time} on ${date}`);
-      }
-    }
-
     const price = Math.max(0, Number(payload.price ?? payload.subtotal ?? 650));
     const subtotal = Math.max(price, Number(payload.subtotal || price));
     const discount = Math.max(0, Number(payload.discount || 0));
@@ -647,25 +685,47 @@ class SupabaseSalonDatabase {
     const servicesList = payload.services || [{ name: payload.service_name || 'Haircut & Styling', price, duration: durationMins }];
     const serviceSummary = servicesList.map(s => s.name).join(' + ');
 
-    const settings = await this.getSettings(salonId);
+    const checkConflict = ACTIVE_BOOKING_STATUSES.includes(status) && !payload.force;
+
+    // Run independent pre-flight queries in a single parallel batch
+    const [conflict, settings, invInfo, existingClient] = await Promise.all([
+      checkConflict ? this.checkStylistConflict(salonId, stylistName, date, time) : Promise.resolve(null),
+      this.getSettings(salonId),
+      this.nextInvoiceSeq(salonId),
+      this.getClientByPhone(salonId, clientPhone)
+    ]);
+
+    if (conflict) {
+      throw new ConflictError(`${stylistName} already has an appointment with ${conflict.client_name} at ${time} on ${date}`);
+    }
+
     const gstRate = Number(settings.gst_rate) || 18;
     const gst = computeGstBreakdown(price, gstRate);
-
     const id = 'apt-' + crypto.randomUUID().slice(0, 8);
-    const invoiceNo = await this.nextInvoiceNo(salonId);
+    const creditVisit = status === 'Completed';
 
-    const clientId = await this.upsertClientRecord(salonId, {
+    const clientUpdatePayload = {
       name: clientName,
       phone: clientPhone,
       preferredStylist: stylistName,
       serviceName: serviceSummary,
       amount: price,
       date,
-      creditVisit: status === 'Completed',
-      rating: payload.rating
-    });
+      creditVisit,
+      rating: payload.rating,
+      existingClient
+    };
 
-    const row = {
+    // For brand-new clients, insert client first so FK references succeed; for existing clients, insert appointment & update client concurrently
+    let clientId;
+    if (!existingClient) {
+      clientId = await this.upsertClientRecord(salonId, clientUpdatePayload);
+    } else {
+      clientId = existingClient.id;
+    }
+
+    let seq = invInfo.seq;
+    const buildRow = (invoiceNo) => ({
       id,
       salon_id: salonId,
       invoice_no: invoiceNo,
@@ -689,15 +749,39 @@ class SupabaseSalonDatabase {
       status,
       rating: payload.rating || null,
       notes: String(payload.notes || '').trim()
+    });
+
+    const insertAppointmentWithRetry = async () => {
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const { data, error } = await this.client
+          .from('appointments')
+          .insert(buildRow(`${invInfo.prefix}${seq + attempt}`))
+          .select()
+          .single();
+        if (!error) return data;
+        if (error.code === '23505' || /invoice_no/i.test(error.message)) {
+          // Re-sync sequence from DB if collided due to timestamp ties or concurrent inserts
+          const fresh = await this.nextInvoiceSeq(salonId);
+          seq = Math.max(seq + 1, fresh.seq - attempt - 1);
+          continue;
+        }
+        throw new Error(error.message);
+      }
+      throw new Error('Could not allocate unique invoice number after retries');
     };
 
-    const { data, error } = await this.client
-      .from('appointments')
-      .insert(row)
-      .select()
-      .single();
-    if (error) throw new Error(error.message);
-    return data;
+    let created;
+    if (existingClient && creditVisit) {
+      [created] = await Promise.all([
+        insertAppointmentWithRetry(),
+        this.upsertClientRecord(salonId, clientUpdatePayload)
+      ]);
+    } else {
+      created = await insertAppointmentWithRetry();
+    }
+
+    this.invalidateCache(salonId);
+    return created;
   }
 
   async updateAppointment(salonId, id, updates) {
@@ -765,6 +849,7 @@ class SupabaseSalonDatabase {
       });
     }
 
+    this.invalidateCache(salonId);
     return data;
   }
 
@@ -774,18 +859,21 @@ class SupabaseSalonDatabase {
       .delete()
       .eq('salon_id', salonId)
       .eq('id', id);
+    if (!error) this.invalidateCache(salonId);
     return !error;
   }
 
   // ===================== CAMPAIGNS =====================
   async getCampaigns(salonId) {
-    const { data, error } = await this.client
-      .from('campaigns')
-      .select('*')
-      .eq('salon_id', salonId)
-      .order('created_at', { ascending: false });
-    if (error) throw new Error(error.message);
-    return data || [];
+    return this.cached(`campaigns:${salonId}`, async () => {
+      const { data, error } = await this.client
+        .from('campaigns')
+        .select('*')
+        .eq('salon_id', salonId)
+        .order('created_at', { ascending: false });
+      if (error) throw new Error(error.message);
+      return data || [];
+    });
   }
 
   async createCampaign(salonId, payload) {
@@ -816,6 +904,7 @@ class SupabaseSalonDatabase {
       .select()
       .single();
     if (error) throw new Error(error.message);
+    this.invalidateCache(salonId);
     return { campaign: data, recipients };
   }
 
@@ -839,6 +928,7 @@ class SupabaseSalonDatabase {
       .select()
       .maybeSingle();
     if (error) throw new Error(error.message);
+    this.invalidateCache(salonId);
     return data;
   }
 
@@ -865,211 +955,222 @@ class SupabaseSalonDatabase {
   }
 
   async getDashboard(salonId) {
-    const today = getLocalIsoDate(0);
-    const weekStart = getLocalIsoDate(-6);
-    const lastWeekSameDay = getLocalIsoDate(-7);
+    return this.cached(`dashboard:${salonId}`, async () => {
+      const today = getLocalIsoDate(0);
+      const weekStart = getLocalIsoDate(-6);
+      const lastWeekSameDay = getLocalIsoDate(-7);
 
-    const [
-      todayRows,
-      upcomingRes,
-      lastWeekRes,
-      weekRows,
-      allClients,
-      settings
-    ] = await Promise.all([
-      this.fetchAll(c =>
-        c.from('appointments')
+      const [
+        todayRows,
+        upcomingRes,
+        lastWeekRes,
+        weekRows,
+        stylistsRes,
+        allClients,
+        settings
+      ] = await Promise.all([
+        this.fetchAll(c =>
+          c.from('appointments')
+            .select('*')
+            .eq('salon_id', salonId)
+            .eq('date', today)
+            .order('created_at', { ascending: false })
+        ),
+        this.client
+          .from('appointments')
           .select('*')
           .eq('salon_id', salonId)
-          .eq('date', today)
-          .order('created_at', { ascending: false })
-      ),
-      this.client
-        .from('appointments')
-        .select('*')
-        .eq('salon_id', salonId)
-        .gt('date', today)
-        .in('status', ['Scheduled', 'Confirmed'])
-        .order('date', { ascending: true })
-        .limit(12),
-      this.fetchAll(c =>
-        c.from('appointments')
-          .select('price')
+          .gt('date', today)
+          .in('status', ['Scheduled', 'Confirmed'])
+          .order('date', { ascending: true })
+          .limit(12),
+        this.fetchAll(c =>
+          c.from('appointments')
+            .select('price')
+            .eq('salon_id', salonId)
+            .eq('date', lastWeekSameDay)
+            .eq('status', 'Completed')
+        ),
+        this.fetchAll(c =>
+          c.from('appointments')
+            .select('date, price, stylist_id, stylist_name, rating, client_phone')
+            .eq('salon_id', salonId)
+            .eq('status', 'Completed')
+            .gte('date', weekStart)
+            .lte('date', today)
+        ),
+        this.client
+          .from('stylists')
+          .select('*')
           .eq('salon_id', salonId)
-          .eq('date', lastWeekSameDay)
-          .eq('status', 'Completed')
-      ),
-      this.fetchAll(c =>
-        c.from('appointments')
-          .select('date, price')
-          .eq('salon_id', salonId)
-          .eq('status', 'Completed')
-          .gte('date', weekStart)
-          .lte('date', today)
-      ),
-      this.getClients(salonId),
-      this.getSettings(salonId)
-    ]);
+          .eq('active', 1)
+          .order('rating', { ascending: false }),
+        this.getClients(salonId),
+        this.getSettings(salonId)
+      ]);
 
-    const completedToday = (todayRows || []).filter(a => a.status === 'Completed');
-    const activeQueue = (todayRows || []).filter(a => ACTIVE_BOOKING_STATUSES.includes(a.status));
-    const upcomingFuture = upcomingRes?.data || [];
+      const completedToday = (todayRows || []).filter(a => a.status === 'Completed');
+      const activeQueue = (todayRows || []).filter(a => ACTIVE_BOOKING_STATUSES.includes(a.status));
+      const upcomingFuture = upcomingRes?.data || [];
 
-    const todayRevenue = completedToday.reduce((s, a) => s + Number(a.price || 0), 0);
-    const lastWeekRevenue = (lastWeekRes || []).reduce((s, a) => s + Number(a.price || 0), 0);
-    const deltaPct = lastWeekRevenue > 0
-      ? Math.round(((todayRevenue - lastWeekRevenue) / lastWeekRevenue) * 100)
-      : null;
+      const todayRevenue = completedToday.reduce((s, a) => s + Number(a.price || 0), 0);
+      const lastWeekRevenue = (lastWeekRes || []).reduce((s, a) => s + Number(a.price || 0), 0);
+      const deltaPct = lastWeekRevenue > 0
+        ? Math.round(((todayRevenue - lastWeekRevenue) / lastWeekRevenue) * 100)
+        : null;
 
-    // Group 7-day series in memory from single range query
-    const byDate = new Map();
-    for (const r of weekRows || []) {
-      const cur = byDate.get(r.date) || { revenue: 0, count: 0 };
-      cur.revenue += Number(r.price || 0);
-      cur.count += 1;
-      byDate.set(r.date, cur);
-    }
-    const weekSeries = [];
-    for (let i = -6; i <= 0; i++) {
-      const iso = getLocalIsoDate(i);
-      const label = i === 0
-        ? 'Today'
-        : new Date(`${iso}T12:00:00Z`).toLocaleDateString('en-IN', { weekday: 'short', timeZone: 'UTC' });
-      const agg = byDate.get(iso) || { revenue: 0, count: 0 };
-      weekSeries.push({ date: iso, label, revenue: agg.revenue, count: agg.count });
-    }
+      // Group 7-day series in memory from single range query
+      const byDate = new Map();
+      for (const r of weekRows || []) {
+        const cur = byDate.get(r.date) || { revenue: 0, count: 0 };
+        cur.revenue += Number(r.price || 0);
+        cur.count += 1;
+        byDate.set(r.date, cur);
+      }
+      const weekSeries = [];
+      for (let i = -6; i <= 0; i++) {
+        const iso = getLocalIsoDate(i);
+        const label = i === 0
+          ? 'Today'
+          : new Date(`${iso}T12:00:00Z`).toLocaleDateString('en-IN', { weekday: 'short', timeZone: 'UTC' });
+        const agg = byDate.get(iso) || { revenue: 0, count: 0 };
+        weekSeries.push({ date: iso, label, revenue: agg.revenue, count: agg.count });
+      }
 
-    const paymentSplit = this.computePaymentSplit(completedToday);
-    const rated = completedToday.filter(a => a.rating != null);
-    const avgRating = rated.length
-      ? +(rated.reduce((s, a) => s + Number(a.rating), 0) / rated.length).toFixed(1)
-      : null;
+      const paymentSplit = this.computePaymentSplit(completedToday);
+      const rated = completedToday.filter(a => a.rating != null);
+      const avgRating = rated.length
+        ? +(rated.reduce((s, a) => s + Number(a.rating), 0) / rated.length).toFixed(1)
+        : null;
 
-    const clientPhoneVisits = new Map(allClients.map(c => [c.phone, c.visits]));
-    const returningToday = completedToday.filter(a => (clientPhoneVisits.get(a.client_phone) || 0) > 1).length;
-    const lapsedClients = allClients.filter(c => c.days_ago >= 30);
+      const clientPhoneVisits = new Map(allClients.map(c => [c.phone, c.visits]));
+      const returningToday = completedToday.filter(a => (clientPhoneVisits.get(a.client_phone) || 0) > 1).length;
+      const lapsedClients = allClients.filter(c => c.days_ago >= 30);
 
-    const stylistPerf = await this.getStylists(salonId, 'today', { allClients });
+      const stylistPerf = this.computeStylistsMetrics(stylistsRes?.data || [], weekRows || [], allClients, 'today', today, today);
 
-    return {
-      date: today,
-      settings,
-      todayRevenue,
-      lastWeekRevenue,
-      deltaPct,
-      completedCount: completedToday.length,
-      avgTicket: completedToday.length ? Math.round(todayRevenue / completedToday.length) : 0,
-      returningToday,
-      avgRating,
-      paymentSplit,
-      weekSeries,
-      stylistPerf,
-      completedToday,
-      activeQueue,
-      upcomingFuture,
-      lapsedClients
-    };
+      return {
+        date: today,
+        settings,
+        todayRevenue,
+        lastWeekRevenue,
+        deltaPct,
+        completedCount: completedToday.length,
+        avgTicket: completedToday.length ? Math.round(todayRevenue / completedToday.length) : 0,
+        returningToday,
+        avgRating,
+        paymentSplit,
+        weekSeries,
+        stylistPerf,
+        completedToday,
+        activeQueue,
+        upcomingFuture,
+        lapsedClients
+      };
+    });
   }
 
   async getReports(salonId, period = 'month') {
-    const today = getLocalIsoDate(0);
-    const days = period === 'day' ? 1 : period === 'week' ? 7 : 30;
-    const startDate = getLocalIsoDate(-(days - 1));
-    const prevStart = getLocalIsoDate(-(days * 2 - 1));
-    const prevEnd = getLocalIsoDate(-days);
+    return this.cached(`reports:${salonId}:${period}`, async () => {
+      const today = getLocalIsoDate(0);
+      const days = period === 'day' ? 1 : period === 'week' ? 7 : 30;
+      const startDate = getLocalIsoDate(-(days - 1));
+      const prevStart = getLocalIsoDate(-(days * 2 - 1));
+      const prevEnd = getLocalIsoDate(-days);
 
-    const [currentRows, prevRows, allClients, settings] = await Promise.all([
-      this.fetchAll(c =>
-        c.from('appointments')
-          .select('*')
-          .eq('salon_id', salonId)
-          .eq('status', 'Completed')
-          .gte('date', startDate)
-          .lte('date', today)
-      ),
-      this.fetchAll(c =>
-        c.from('appointments')
-          .select('price')
-          .eq('salon_id', salonId)
-          .eq('status', 'Completed')
-          .gte('date', prevStart)
-          .lte('date', prevEnd)
-      ),
-      this.getClients(salonId),
-      this.getSettings(salonId)
-    ]);
+      const [currentRows, prevRows, allClients, settings] = await Promise.all([
+        this.fetchAll(c =>
+          c.from('appointments')
+            .select('date, price, cgst, sgst, discount, payment_mode, payment_split_json, service_name, services_json')
+            .eq('salon_id', salonId)
+            .eq('status', 'Completed')
+            .gte('date', startDate)
+            .lte('date', today)
+        ),
+        this.fetchAll(c =>
+          c.from('appointments')
+            .select('price')
+            .eq('salon_id', salonId)
+            .eq('status', 'Completed')
+            .gte('date', prevStart)
+            .lte('date', prevEnd)
+        ),
+        this.getClients(salonId),
+        this.getSettings(salonId)
+      ]);
 
-    const curr = currentRows || [];
-    const prev = prevRows || [];
-    const totalRevenue = curr.reduce((s, a) => s + Number(a.price || 0), 0);
-    const prevRevenue = prev.reduce((s, a) => s + Number(a.price || 0), 0);
-    const revenueDeltaPct = prevRevenue > 0 ? Math.round(((totalRevenue - prevRevenue) / prevRevenue) * 100) : null;
+      const curr = currentRows || [];
+      const prev = prevRows || [];
+      const totalRevenue = curr.reduce((s, a) => s + Number(a.price || 0), 0);
+      const prevRevenue = prev.reduce((s, a) => s + Number(a.price || 0), 0);
+      const revenueDeltaPct = prevRevenue > 0 ? Math.round(((totalRevenue - prevRevenue) / prevRevenue) * 100) : null;
 
-    const footfall = curr.length;
-    const avgTicket = footfall ? Math.round(totalRevenue / footfall) : 0;
-    const totalGst = +(curr.reduce((s, a) => s + Number(a.cgst || 0) + Number(a.sgst || 0), 0)).toFixed(2);
-    const totalDiscount = +(curr.reduce((s, a) => s + Number(a.discount || 0), 0)).toFixed(2);
+      const footfall = curr.length;
+      const avgTicket = footfall ? Math.round(totalRevenue / footfall) : 0;
+      const totalGst = +(curr.reduce((s, a) => s + Number(a.cgst || 0) + Number(a.sgst || 0), 0)).toFixed(2);
+      const totalDiscount = +(curr.reduce((s, a) => s + Number(a.discount || 0), 0)).toFixed(2);
 
-    const repeatClients = allClients.filter(c => c.visits > 1).length;
-    const retentionPct = allClients.length ? Math.round((repeatClients / allClients.length) * 100) : 0;
+      const repeatClients = allClients.filter(c => c.visits > 1).length;
+      const retentionPct = allClients.length ? Math.round((repeatClients / allClients.length) * 100) : 0;
 
-    const chartDays = Math.min(days, 14);
-    const dailySeries = [];
-    for (let i = -(chartDays - 1); i <= 0; i++) {
-      const iso = getLocalIsoDate(i);
-      const dayRows = curr.filter(a => a.date === iso);
-      const rev = dayRows.reduce((s, a) => s + Number(a.price || 0), 0);
-      const dt = new Date(`${iso}T12:00:00Z`);
-      dailySeries.push({
-        date: iso,
-        label: i === 0 ? 'Today' : dt.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'UTC' }),
-        shortLabel: i === 0 ? 'Today' : String(dt.getUTCDate()),
-        revenue: rev,
-        count: dayRows.length
-      });
-    }
-
-    const paymentSplit = this.computePaymentSplit(curr);
-    const openingCash = Number(settings.opening_cash || 0);
-
-    // Top services mix (handles JSONB Array and JSON string safely)
-    const srvMap = new Map();
-    for (const a of curr) {
-      let items = [];
-      if (Array.isArray(a.services_json)) {
-        items = a.services_json;
-      } else if (typeof a.services_json === 'string') {
-        try { items = JSON.parse(a.services_json || '[]'); } catch (_) {}
+      const chartDays = Math.min(days, 14);
+      const dailySeries = [];
+      for (let i = -(chartDays - 1); i <= 0; i++) {
+        const iso = getLocalIsoDate(i);
+        const dayRows = curr.filter(a => a.date === iso);
+        const rev = dayRows.reduce((s, a) => s + Number(a.price || 0), 0);
+        const dt = new Date(`${iso}T12:00:00Z`);
+        dailySeries.push({
+          date: iso,
+          label: i === 0 ? 'Today' : dt.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'UTC' }),
+          shortLabel: i === 0 ? 'Today' : String(dt.getUTCDate()),
+          revenue: rev,
+          count: dayRows.length
+        });
       }
-      if (!items.length) items = [{ name: a.service_name, price: a.price }];
-      for (const it of items) {
-        const name = it?.name || a.service_name || 'Service';
-        const cur = srvMap.get(name) || { name, count: 0, revenue: 0 };
-        cur.count += 1;
-        cur.revenue += Number(it?.price || 0);
-        srvMap.set(name, cur);
-      }
-    }
-    const serviceMix = [...srvMap.values()].sort((a, b) => b.revenue - a.revenue);
 
-    return {
-      period,
-      startDate,
-      endDate: today,
-      totalRevenue,
-      prevRevenue,
-      revenueDeltaPct,
-      footfall,
-      avgTicket,
-      retentionPct,
-      totalGst,
-      totalDiscount,
-      paymentSplit,
-      openingCash,
-      expectedDrawerCash: openingCash + paymentSplit.Cash,
-      dailySeries,
-      serviceMix
-    };
+      const paymentSplit = this.computePaymentSplit(curr);
+      const openingCash = Number(settings.opening_cash || 0);
+
+      // Top services mix (handles JSONB Array and JSON string safely)
+      const srvMap = new Map();
+      for (const a of curr) {
+        let items = [];
+        if (Array.isArray(a.services_json)) {
+          items = a.services_json;
+        } else if (typeof a.services_json === 'string') {
+          try { items = JSON.parse(a.services_json || '[]'); } catch (_) {}
+        }
+        if (!items.length) items = [{ name: a.service_name, price: a.price }];
+        for (const it of items) {
+          const name = it?.name || a.service_name || 'Service';
+          const cur = srvMap.get(name) || { name, count: 0, revenue: 0 };
+          cur.count += 1;
+          cur.revenue += Number(it?.price || 0);
+          srvMap.set(name, cur);
+        }
+      }
+      const serviceMix = [...srvMap.values()].sort((a, b) => b.revenue - a.revenue);
+
+      return {
+        period,
+        startDate,
+        endDate: today,
+        totalRevenue,
+        prevRevenue,
+        revenueDeltaPct,
+        footfall,
+        avgTicket,
+        retentionPct,
+        totalGst,
+        totalDiscount,
+        paymentSplit,
+        openingCash,
+        expectedDrawerCash: openingCash + paymentSplit.Cash,
+        dailySeries,
+        serviceMix
+      };
+    });
   }
 
   async exportGstCsv(salonId, period = 'month') {
