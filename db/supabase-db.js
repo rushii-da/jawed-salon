@@ -226,7 +226,13 @@ class SupabaseSalonDatabase {
     if (updates.gst_rate !== undefined) patch.gst_rate = Number(updates.gst_rate) || 18;
     if (updates.sac_code !== undefined) patch.sac_code = String(updates.sac_code).trim();
     if (updates.opening_cash !== undefined) patch.opening_cash = Number(updates.opening_cash) || 5000;
-    if (updates.owner_pin !== undefined) patch.owner_pin = String(updates.owner_pin).trim();
+    if (updates.owner_pin !== undefined) {
+      const cleanPin = String(updates.owner_pin).trim();
+      if (cleanPin !== '' && !/^\d{6}$/.test(cleanPin)) {
+        throw new ValidationError('Owner PIN must be exactly 6 digits');
+      }
+      patch.owner_pin = cleanPin;
+    }
     patch.updated_at = new Date().toISOString();
 
     const { error } = await this.client

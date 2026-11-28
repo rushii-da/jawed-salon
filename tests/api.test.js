@@ -210,26 +210,66 @@ describe('Jawed Salon OS — Security, Data Integrity & REST API', () => {
     assert.ok(csv.raw.includes('CGST (INR),SGST (INR)'));
   });
 
-  it('enforces Owner PIN on protected routes and disables /api/reset in production', async () => {
-    const setPin = await reqJson(port, 'PATCH', '/api/settings', { owner_pin: '4321' });
+  it('enforces 6-digit Owner PIN on Reports, Settings, protected routes, rate limiting, and disables /api/reset in production', async () => {
+    const shortPin = await reqJson(port, 'PATCH', '/api/settings', { owner_pin: '4321' });
+    assert.equal(shortPin.status, 400);
+    assert.equal(shortPin.data.code, 'VALIDATION_ERROR');
+
+    const setPin = await reqJson(port, 'PATCH', '/api/settings', { owner_pin: '432100' });
     assert.equal(setPin.status, 200);
     assert.equal(setPin.data.has_owner_pin, true);
+    assert.equal(setPin.data.can_reset, true);
     assert.equal(setPin.data.owner_pin, undefined, 'Must never leak raw PIN in GET/PATCH response');
 
-    // Without PIN -> 401
+    // Reports & GST CSV require PIN once set
+    const repNoPin = await reqJson(port, 'GET', '/api/reports?period=month');
+    assert.equal(repNoPin.status, 401);
+    assert.equal(repNoPin.data.code, 'PIN_REQUIRED');
+
+    const csvNoPin = await reqJson(port, 'GET', '/api/reports/gst-csv?period=month');
+    assert.equal(csvNoPin.status, 401);
+    assert.equal(csvNoPin.data.code, 'PIN_REQUIRED');
+
+    const repWithPin = await reqJson(port, 'GET', '/api/reports?period=month', null, { 'X-Owner-Pin': '432100' });
+    assert.equal(repWithPin.status, 200);
+    assert.ok(repWithPin.data.totalRevenue > 0);
+
+    const csvWithPin = await reqJson(port, 'GET', '/api/reports/gst-csv?period=month', null, { 'X-Owner-Pin': '432100' });
+    assert.equal(csvWithPin.status, 200);
+    assert.ok(csvWithPin.raw.includes('Invoice No,Date,Client Name'));
+
+    // Verify PIN endpoint
+    const verifyBad = await reqJson(port, 'POST', '/api/auth/verify-pin', { pin: '000000' });
+    assert.equal(verifyBad.status, 401);
+    assert.equal(verifyBad.data.code, 'PIN_REQUIRED');
+
+    const verifyOk = await reqJson(port, 'POST', '/api/auth/verify-pin', { pin: '432100' });
+    assert.equal(verifyOk.status, 200);
+    assert.equal(verifyOk.data.ok, true);
+
+    // Without PIN on Settings -> 401
     const unauth = await reqJson(port, 'PATCH', '/api/settings', { salon_name: 'Hacked' });
     assert.equal(unauth.status, 401);
 
     // With valid PIN -> 200
-    const auth = await reqJson(port, 'PATCH', '/api/settings', { salon_name: 'Jawed Salon Studio' }, { 'X-Owner-Pin': '4321' });
+    const auth = await reqJson(port, 'PATCH', '/api/settings', { salon_name: 'Jawed Salon Studio' }, { 'X-Owner-Pin': '432100' });
     assert.equal(auth.status, 200);
     assert.equal(auth.data.salon_name, 'Jawed Salon Studio');
+
+    // Rate limit after 5 consecutive bad PIN tries
+    for (let i = 0; i < 4; i++) {
+      const r = await reqJson(port, 'POST', '/api/auth/verify-pin', { pin: '999999' });
+      assert.equal(r.status, 401);
+    }
+    const locked = await reqJson(port, 'POST', '/api/auth/verify-pin', { pin: '999999' });
+    assert.equal(locked.status, 429);
+    assert.equal(locked.data.code, 'RATE_LIMITED');
 
     // Reset disabled in production
     const prevEnv = process.env.NODE_ENV;
     process.env.NODE_ENV = 'production';
     try {
-      const prodReset = await reqJson(port, 'POST', '/api/reset', null, { 'X-Owner-Pin': '4321' });
+      const prodReset = await reqJson(port, 'POST', '/api/reset', null, { 'X-Owner-Pin': '432100' });
       assert.equal(prodReset.status, 403);
     } finally {
       if (prevEnv === undefined) delete process.env.NODE_ENV;

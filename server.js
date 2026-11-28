@@ -134,20 +134,79 @@ function parseBody(req, maxBytes = 256 * 1024) {
   });
 }
 
-function sanitizeSettingsForClient(settings = {}) {
+function sanitizeSettingsForClient(settings = {}, canReset = false) {
   const { owner_pin, ...safe } = settings;
   return {
     ...safe,
-    has_owner_pin: Boolean(owner_pin && owner_pin.length > 0)
+    has_owner_pin: Boolean(owner_pin && owner_pin.length > 0),
+    can_reset: Boolean(canReset)
   };
 }
 
-async function checkOwnerPin(req, db, salonId) {
+const PIN_FAIL_MAX = 5;
+const PIN_LOCKOUT_MS = 60 * 1000;
+
+function safeEqualPin(a, b) {
+  const bufA = Buffer.from(String(a || ''), 'utf8');
+  const bufB = Buffer.from(String(b || ''), 'utf8');
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
+
+async function verifyOwnerPinAccess(req, db, salonId, failureMap, providedOverride = undefined) {
   const isSupabase = db instanceof SupabaseSalonDatabase;
   const settings = isSupabase ? await db.getSettings(salonId) : db.getSettings();
-  if (!settings || !settings.owner_pin) return true;
-  const provided = String(req.headers['x-owner-pin'] || '').trim();
-  return provided === settings.owner_pin;
+  if (!settings || !settings.owner_pin) {
+    return { ok: true, hasPin: false };
+  }
+
+  const provided = String(providedOverride !== undefined ? providedOverride : (req.headers['x-owner-pin'] || '')).trim();
+  if (!provided) {
+    return { ok: false, status: 401, code: 'PIN_REQUIRED', message: 'Owner PIN required' };
+  }
+
+  const clientIp = req.socket?.remoteAddress || 'unknown';
+  const key = `${salonId}:${clientIp}`;
+  const now = Date.now();
+  const entry = failureMap.get(key);
+  if (entry && entry.blockedUntil > now) {
+    const waitSecs = Math.max(1, Math.ceil((entry.blockedUntil - now) / 1000));
+    return {
+      ok: false,
+      status: 429,
+      code: 'RATE_LIMITED',
+      message: `Too many incorrect PIN attempts. Try again in ${waitSecs}s.`
+    };
+  }
+
+  if (safeEqualPin(provided, settings.owner_pin)) {
+    failureMap.delete(key);
+    return { ok: true, hasPin: true };
+  }
+
+  const priorCount = (entry && entry.blockedUntil > 0 && entry.blockedUntil <= now) ? 0 : (entry?.count || 0);
+  const nextCount = priorCount + 1;
+  if (nextCount >= PIN_FAIL_MAX) {
+    failureMap.set(key, { count: nextCount, blockedUntil: now + PIN_LOCKOUT_MS });
+    return {
+      ok: false,
+      status: 429,
+      code: 'RATE_LIMITED',
+      message: 'Too many incorrect PIN attempts. Try again in 60s.'
+    };
+  }
+
+  failureMap.set(key, { count: nextCount, blockedUntil: 0 });
+  return { ok: false, status: 401, code: 'PIN_REQUIRED', message: 'Invalid Owner PIN' };
+}
+
+async function requireOwnerPin(req, res, db, salonId, failureMap, providedOverride = undefined) {
+  const check = await verifyOwnerPinAccess(req, db, salonId, failureMap, providedOverride);
+  if (!check.ok) {
+    sendError(res, check.status, check.message, check.code);
+    return false;
+  }
+  return true;
 }
 
 function createAppServer(dbOption = null) {
@@ -160,6 +219,11 @@ function createAppServer(dbOption = null) {
   const db = useSqlite ? new SalonDatabase(dbPathOpt) : new SupabaseSalonDatabase();
   const isSupabase = db instanceof SupabaseSalonDatabase;
   const requireAuth = Boolean(opts.requireAuth || isSupabase);
+  const pinFailureMap = new Map();
+  const canReset = !isSupabase && process.env.NODE_ENV !== 'production';
+  const safeSettings = (s) => sanitizeSettingsForClient(s, canReset);
+  const checkPin = (req, res, targetSalonId, override = undefined) =>
+    requireOwnerPin(req, res, db, targetSalonId, pinFailureMap, override);
 
   const server = http.createServer(async (req, res) => {
     res._acceptsGzip = /\bgzip\b/i.test(String(req.headers['accept-encoding'] || ''));
@@ -226,6 +290,15 @@ function createAppServer(dbOption = null) {
           salonId = tokenPayload.salonId;
         }
 
+        // Auth: Verify Owner PIN
+        if (req.method === 'POST' && reqPath === '/api/auth/verify-pin') {
+          const body = await parseBody(req);
+          const ok = await checkPin(req, res, salonId, body?.pin);
+          if (!ok) return;
+          const settings = isSupabase ? await db.getSettings(salonId) : db.getSettings();
+          return sendJson(res, 200, { ok: true, has_owner_pin: Boolean(settings?.owner_pin) });
+        }
+
         // Auth: Me
         if (req.method === 'GET' && reqPath === '/api/auth/me') {
           if (isSupabase) {
@@ -238,7 +311,7 @@ function createAppServer(dbOption = null) {
         // Dashboard aggregate
         if (req.method === 'GET' && reqPath === '/api/dashboard') {
           const data = isSupabase ? await db.getDashboard(salonId) : db.getDashboard();
-          data.settings = sanitizeSettingsForClient(data.settings);
+          data.settings = safeSettings(data.settings);
           return sendJson(res, 200, data);
         }
 
@@ -274,8 +347,7 @@ function createAppServer(dbOption = null) {
           return updated ? sendJson(res, 200, updated) : sendError(res, 404, 'Service not found', 'NOT_FOUND');
         }
         if (req.method === 'DELETE' && reqPath.startsWith('/api/services/')) {
-          const pinOk = await checkOwnerPin(req, db, salonId);
-          if (!pinOk) return sendError(res, 401, 'Owner PIN required', 'PIN_REQUIRED');
+          if (!(await checkPin(req, res, salonId))) return;
           const id = reqPath.slice('/api/services/'.length);
           const ok = isSupabase ? await db.deleteService(salonId, id) : db.deleteService(id);
           return ok ? sendJson(res, 200, { success: true, id }) : sendError(res, 404, 'Service not found', 'NOT_FOUND');
@@ -299,8 +371,7 @@ function createAppServer(dbOption = null) {
           return updated ? sendJson(res, 200, updated) : sendError(res, 404, 'Stylist not found', 'NOT_FOUND');
         }
         if (req.method === 'DELETE' && reqPath.startsWith('/api/stylists/')) {
-          const pinOk = await checkOwnerPin(req, db, salonId);
-          if (!pinOk) return sendError(res, 401, 'Owner PIN required', 'PIN_REQUIRED');
+          if (!(await checkPin(req, res, salonId))) return;
           const id = reqPath.slice('/api/stylists/'.length);
           const ok = isSupabase ? await db.deleteStylist(salonId, id) : db.deleteStylist(id);
           return ok ? sendJson(res, 200, { success: true, id }) : sendError(res, 404, 'Stylist not found', 'NOT_FOUND');
@@ -352,8 +423,7 @@ function createAppServer(dbOption = null) {
           return updated ? sendJson(res, 200, updated) : sendError(res, 404, 'Appointment not found', 'NOT_FOUND');
         }
         if (req.method === 'DELETE' && reqPath.startsWith('/api/appointments/')) {
-          const pinOk = await checkOwnerPin(req, db, salonId);
-          if (!pinOk) return sendError(res, 401, 'Owner PIN required', 'PIN_REQUIRED');
+          if (!(await checkPin(req, res, salonId))) return;
           const id = reqPath.slice('/api/appointments/'.length);
           const ok = isSupabase ? await db.deleteAppointment(salonId, id) : db.deleteAppointment(id);
           return ok ? sendJson(res, 200, { success: true, deletedId: id }) : sendError(res, 404, 'Appointment not found', 'NOT_FOUND');
@@ -376,13 +446,15 @@ function createAppServer(dbOption = null) {
           return updated ? sendJson(res, 200, updated) : sendError(res, 404, 'Campaign not found', 'NOT_FOUND');
         }
 
-        // Reports & GST CSV Export
+        // Reports & GST CSV Export (Owner PIN protected)
         if (req.method === 'GET' && reqPath === '/api/reports') {
+          if (!(await checkPin(req, res, salonId))) return;
           const period = ['day', 'week', 'month'].includes(query.period) ? query.period : 'month';
           const data = isSupabase ? await db.getReports(salonId, period) : db.getReports(period);
           return sendJson(res, 200, data);
         }
         if (req.method === 'GET' && reqPath === '/api/reports/gst-csv') {
+          if (!(await checkPin(req, res, salonId))) return;
           const period = ['day', 'week', 'month'].includes(query.period) ? query.period : 'month';
           const csv = isSupabase ? await db.exportGstCsv(salonId, period) : db.exportGstCsv(period);
           const filename = `salon-${salonId}-gst-audit-${period}-${new Date().toISOString().slice(0, 10)}.csv`;
@@ -398,14 +470,13 @@ function createAppServer(dbOption = null) {
         // Settings
         if (req.method === 'GET' && reqPath === '/api/settings') {
           const data = isSupabase ? await db.getSettings(salonId) : db.getSettings();
-          return sendJson(res, 200, sanitizeSettingsForClient(data));
+          return sendJson(res, 200, safeSettings(data));
         }
         if (req.method === 'PATCH' && reqPath === '/api/settings') {
-          const pinOk = await checkOwnerPin(req, db, salonId);
-          if (!pinOk) return sendError(res, 401, 'Owner PIN required', 'PIN_REQUIRED');
+          if (!(await checkPin(req, res, salonId))) return;
           const body = await parseBody(req);
           const updated = isSupabase ? await db.updateSettings(salonId, body) : db.updateSettings(body);
-          return sendJson(res, 200, sanitizeSettingsForClient(updated));
+          return sendJson(res, 200, safeSettings(updated));
         }
 
         // Dev-only Reset
@@ -413,8 +484,7 @@ function createAppServer(dbOption = null) {
           if (process.env.NODE_ENV === 'production' || isSupabase) {
             return sendError(res, 403, 'Database reset is disabled in production / cloud mode', 'FORBIDDEN');
           }
-          const pinOk = await checkOwnerPin(req, db, salonId);
-          if (!pinOk) return sendError(res, 401, 'Owner PIN required', 'PIN_REQUIRED');
+          if (!(await checkPin(req, res, salonId))) return;
           return sendJson(res, 200, db.reset());
         }
 
@@ -474,7 +544,7 @@ function createAppServer(dbOption = null) {
           }
           sendCompressed(res, 200, {
             'Content-Type': contentType,
-            'Cache-Control': ext === '.html' ? 'no-cache' : 'public, max-age=300'
+            'Cache-Control': ['.html', '.js', '.css'].includes(ext) ? 'no-cache' : 'public, max-age=300'
           }, content, req.method === 'HEAD');
         });
       });

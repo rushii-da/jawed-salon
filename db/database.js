@@ -419,6 +419,12 @@ class SalonDatabase {
   }
 
   updateSettings(updates) {
+    if (updates.owner_pin !== undefined) {
+      const cleanPin = String(updates.owner_pin).trim();
+      if (cleanPin !== '' && !/^\d{6}$/.test(cleanPin)) {
+        throw new ValidationError('Owner PIN must be exactly 6 digits');
+      }
+    }
     const allowed = ['salon_name', 'branch_name', 'gstin', 'gst_rate', 'sac_code', 'opening_cash', 'owner_pin'];
     const stmt = this.db.prepare('INSERT INTO salon_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value');
     this.withTransaction(() => {

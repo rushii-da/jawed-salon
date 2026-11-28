@@ -81,7 +81,11 @@ const state = {
 
   lastReceipt: null,
   lastFocusedEl: null,
-  indicatorTop: 0
+  indicatorTop: 0,
+  reportsUnlocked: false,
+  reportsPinError: '',
+  reportsUnlockBusy: false,
+  reportsPinVisible: false
 };
 
 // ===================== TOAST & THEME =====================
@@ -984,6 +988,60 @@ function renderCampaignsView() {
 }
 
 function renderReportsView() {
+  if (!state.reportsUnlocked) {
+    const hasPin = Boolean(state.settings?.has_owner_pin);
+    const errText = state.reportsPinError || '';
+    const errStyle = errText ? 'display:block;margin:0' : 'display:none;margin:0';
+    const lockIcon = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>';
+
+    return headerBar('Revenue & GST Audit Ledger', 'Protected Owner Analytics · 6-digit PIN required', '') + `
+    <div class="card login-card" style="max-width:440px;margin:20px auto">
+      <div class="login-head">
+        <div class="login-brand-row">
+          <div class="login-mark" aria-hidden="true">${lockIcon}</div>
+          ${chip(hasPin ? 'Reports Locked' : 'First-Time Setup', hasPin ? 'amb' : 'vio')}
+        </div>
+        <h2 class="login-title">${hasPin ? 'Enter 6-Digit Owner PIN' : 'Create 6-Digit Owner PIN'}</h2>
+        <p class="login-sub">${hasPin
+          ? 'Revenue ledgers, cash drawer totals, and GST CSV exports require the owner PIN. Reports auto-lock when you switch tabs.'
+          : 'Set a 6-digit numeric PIN once to protect Revenue Reports, GST exports, Settings, and Void actions.'}</p>
+      </div>
+      ${hasPin ? `
+        <form id="reportsUnlockForm" class="login-form" autocomplete="off" novalidate>
+          <div>
+            <label class="fl" for="reportsPinInput">Owner Security PIN</label>
+            <div class="pass-wrap">
+              <input type="${state.reportsPinVisible ? 'text' : 'password'}" id="reportsPinInput" class="in pass-in" inputmode="numeric" maxlength="6" placeholder="Enter 6-digit PIN" required autocomplete="new-password" aria-describedby="reportsPinError">
+              <button type="button" class="pass-toggle" data-action="toggle-reports-pin-vis" aria-label="${state.reportsPinVisible ? 'Hide PIN' : 'Show PIN'}" aria-pressed="${state.reportsPinVisible ? 'true' : 'false'}">
+                ${state.reportsPinVisible ? EYE_OFF_SVG : EYE_ON_SVG}
+              </button>
+            </div>
+          </div>
+          <div id="reportsPinError" class="alert-box" role="alert" style="${errStyle}">${escapeHtml(errText)}</div>
+          <button type="submit" class="btn l login-btn" id="btnUnlockReports" ${state.reportsUnlockBusy ? 'disabled' : ''}>
+            ${state.reportsUnlockBusy ? 'Verifying…' : 'Unlock Reports'}
+          </button>
+        </form>
+      ` : `
+        <form id="reportsSetupPinForm" class="login-form" autocomplete="off" novalidate>
+          <div>
+            <label class="fl" for="setupPin1">New 6-Digit PIN</label>
+            <input type="password" id="setupPin1" class="in" inputmode="numeric" maxlength="6" pattern="\\d{6}" placeholder="Enter 6 digits" required autocomplete="new-password" aria-describedby="reportsPinError">
+          </div>
+          <div>
+            <label class="fl" for="setupPin2">Confirm 6-Digit PIN</label>
+            <input type="password" id="setupPin2" class="in" inputmode="numeric" maxlength="6" pattern="\\d{6}" placeholder="Re-enter 6 digits" required autocomplete="new-password" aria-describedby="reportsPinError">
+          </div>
+          <div id="reportsPinError" class="alert-box" role="alert" style="${errStyle}">${escapeHtml(errText)}</div>
+          <button type="submit" class="btn l login-btn" id="btnSetupReportsPin" ${state.reportsUnlockBusy ? 'disabled' : ''}>
+            ${state.reportsUnlockBusy ? 'Saving PIN…' : 'Set 6-Digit PIN & Open Reports'}
+          </button>
+        </form>
+      `}
+      <p class="login-foot">Auto-locks on tab change or page refresh</p>
+    </div>`;
+  }
+
   const r = state.reports;
   if (!r) return `<div class="card">Loading financial reports...</div>`;
 
@@ -993,6 +1051,7 @@ function renderReportsView() {
         <button type="button" class="${state.reportPeriod === k ? 'on' : ''}" data-action="report-period" data-val="${k}" role="tab" aria-selected="${state.reportPeriod === k ? 'true' : 'false'}">${lbl}</button>
       `).join('')}
     </div>
+    <button type="button" class="btn sec" data-action="lock-reports">Lock Reports</button>
     <button type="button" class="btn l" data-action="export-gst-csv">
       <svg viewBox="0 0 24 24" aria-hidden="true">${ICO.download}</svg> Export GST CSV
     </button>
@@ -1117,8 +1176,13 @@ function renderSettingsView() {
             </div>
           </div>
 
-          <label class="fl" for="setPin">Owner Security PIN ${s.has_owner_pin ? chip('PIN Active', 'lime') : chip('Unset')}</label>
-          <input class="in" id="setPin" name="owner_pin" type="password" placeholder="Leave blank to keep unchanged (or enter 4-digit PIN)">
+          <label class="fl" for="setPin">${s.has_owner_pin ? 'New Owner PIN (optional, 6 digits)' : 'Set Owner Security PIN (6 digits)'} ${s.has_owner_pin ? chip('PIN Active', 'lime') : chip('Unset')}</label>
+          <input class="in" id="setPin" name="owner_pin" type="password" inputmode="numeric" maxlength="6" placeholder="Leave blank to keep unchanged (or enter 6-digit PIN)" autocomplete="new-password">
+
+          ${s.has_owner_pin ? `
+            <label class="fl" for="settingsCurrentPin">Current Owner PIN (required to save changes) <span class="req">*</span></label>
+            <input class="in" id="settingsCurrentPin" name="current_owner_pin" type="password" inputmode="numeric" maxlength="6" placeholder="Enter current Owner PIN" required autocomplete="new-password">
+          ` : ''}
 
           <div class="modal-actions">
             <button type="submit" class="btn l">Save Salon Settings</button>
@@ -1126,20 +1190,13 @@ function renderSettingsView() {
         </form>
       </div>
 
-      <div class="card" style="border-color:rgba(220,38,38,0.3)">
-        <h2>Danger Zone &amp; Owner Access</h2>
-        ${s.has_owner_pin ? `
-          <div style="margin-bottom:14px">
-            <label class="fl" for="unlockPin" style="margin-top:0">Session Owner PIN (for protected admin actions)</label>
-            <div style="display:flex;gap:8px">
-              <input class="in" id="unlockPin" type="password" placeholder="Enter PIN" value="${escapeHtml(getSessionOwnerPin())}">
-              <button type="button" class="btn sec" data-action="save-session-pin">Apply PIN</button>
-            </div>
-          </div>
-        ` : ''}
-        <p class="mut" style="font-size:13px;margin:0 0 12px">Resetting clears all transactions and restores demo seed data. Automatically disabled when <code>NODE_ENV=production</code>.</p>
-        <button type="button" class="btn dan sm" data-action="open-reset-modal">Reset Demo Database</button>
-      </div>
+      ${s.can_reset ? `
+        <div class="card" style="border-color:rgba(220,38,38,0.3)">
+          <h2>Local Demo Reset</h2>
+          <p class="mut" style="font-size:13px;margin:0 0 12px">Resets local SQLite transactions back to demo seed data.</p>
+          <button type="button" class="btn dan sm" data-action="open-reset-modal">Reset Demo Database</button>
+        </div>
+      ` : ''}
     </div>
 
     <div class="fx" style="gap:18px">
@@ -1332,6 +1389,27 @@ function openRescheduleModal(apt) {
   openOverlay('formModal');
 }
 
+function openArchiveModal({ kind, id, label }) {
+  const needPin = Boolean(state.settings?.has_owner_pin);
+  $('#fmTitle').textContent = kind === 'stylist' ? `Archive Stylist: ${label}` : `Archive Service: ${label}`;
+  $('#fmBody').innerHTML = `
+    <form id="archiveRecordForm" data-kind="${escapeHtml(kind)}" data-id="${escapeHtml(id)}" autocomplete="off">
+      <p class="mut" style="margin:0 0 12px;font-size:13.5px;line-height:1.5">
+        Archiving <b>${escapeHtml(label)}</b> removes it from active counter selections while preserving past GST invoices.
+      </p>
+      ${needPin ? `
+        <label class="fl" for="archivePin">Owner Security PIN <span class="req">*</span></label>
+        <input class="in" id="archivePin" name="owner_pin" type="password" inputmode="numeric" maxlength="6" placeholder="Enter Owner PIN" required autocomplete="new-password">
+      ` : ''}
+      <div class="modal-actions">
+        <button type="button" class="btn sec" data-close-modal="formModal">Cancel</button>
+        <button type="submit" class="btn dan">Confirm Archive</button>
+      </div>
+    </form>
+  `;
+  openOverlay('formModal');
+}
+
 function openVoidBillModal(apt) {
   if (!apt) return;
   const needPin = Boolean(state.settings?.has_owner_pin && !getSessionOwnerPin());
@@ -1343,7 +1421,7 @@ function openVoidBillModal(apt) {
       </p>
       ${needPin ? `
         <label class="fl" for="voidPin">Owner Security PIN <span class="req">*</span></label>
-        <input class="in" id="voidPin" name="owner_pin" type="password" placeholder="Enter Owner PIN" required autocomplete="off">
+        <input class="in" id="voidPin" name="owner_pin" type="password" inputmode="numeric" maxlength="6" placeholder="Enter 6-digit Owner PIN" required autocomplete="new-password">
       ` : ''}
       <div class="modal-actions">
         <button type="button" class="btn sec" data-close-modal="formModal">Keep Bill</button>
@@ -1367,6 +1445,16 @@ const _syncState = {
   campaignsLoaded: false
 };
 
+function lockReports({ clearPin = true } = {}) {
+  state.reportsUnlocked = false;
+  state.reportsPinError = '';
+  state.reportsUnlockBusy = false;
+  state.reportsPinVisible = false;
+  state.reports = null;
+  _syncState.reportsCache = {};
+  if (clearPin) setSessionOwnerPin('');
+}
+
 function hasPageData(page) {
   switch (page) {
     case 'dashboard': return Boolean(state.dashboard);
@@ -1375,7 +1463,7 @@ function hasPageData(page) {
     case 'settings': return state.services.length > 0 && state.stylists.length > 0;
     case 'customers': return state.clients.length > 0;
     case 'stylists': return Boolean(_syncState.stylistsCache[state.stylistPeriod]) || state.stylists.length > 0;
-    case 'reports': return Boolean(_syncState.reportsCache[state.reportPeriod]);
+    case 'reports': return state.reportsUnlocked && Boolean(_syncState.reportsCache[state.reportPeriod]);
     case 'campaigns': return _syncState.campaignsLoaded;
     default: return Boolean(state.dashboard);
   }
@@ -1440,9 +1528,27 @@ async function refreshDataForPage(page = state.page, { force = false } = {}) {
     state.stylists = stylists;
     _syncState.stylistsCache[state.stylistPeriod] = stylists;
   } else if (page === 'reports') {
-    const reports = await api.getReports(state.reportPeriod);
-    state.reports = reports;
-    _syncState.reportsCache[state.reportPeriod] = reports;
+    if (_syncState.coreAt === 0) {
+      try {
+        state.settings = await api.getSettings();
+        _syncState.coreAt = Date.now();
+      } catch (_) {}
+    }
+    if (!state.reportsUnlocked) {
+      return;
+    }
+    try {
+      const reports = await api.getReports(state.reportPeriod);
+      state.reports = reports;
+      _syncState.reportsCache[state.reportPeriod] = reports;
+    } catch (err) {
+      if (err.code === 'PIN_REQUIRED' || err.code === 'RATE_LIMITED') {
+        lockReports();
+        state.reportsPinError = err.message || 'Owner PIN required';
+        return;
+      }
+      throw err;
+    }
   } else if (page === 'campaigns') {
     const tasks = [api.getCampaigns()];
     if (force || state.clients.length === 0) tasks.push(api.getClients());
@@ -1462,17 +1568,12 @@ function prewarmBackgroundTabs() {
   _prewarmed = true;
   setTimeout(async () => {
     try {
-      const [clients, reports] = await Promise.all([
-        state.clients.length ? Promise.resolve(state.clients) : api.getClients(),
-        _syncState.reportsCache[state.reportPeriod] ? Promise.resolve(_syncState.reportsCache[state.reportPeriod]) : api.getReports(state.reportPeriod)
-      ]);
-      if (clients && !state.clients.length) {
-        state.clients = clients;
-        _syncState.clientsAt = Date.now();
-      }
-      if (reports) {
-        _syncState.reportsCache[state.reportPeriod] = reports;
-        if (!state.reports) state.reports = reports;
+      if (!state.clients.length) {
+        const clients = await api.getClients();
+        if (clients && !state.clients.length) {
+          state.clients = clients;
+          _syncState.clientsAt = Date.now();
+        }
       }
     } catch (_) {}
   }, 300);
@@ -1551,11 +1652,14 @@ function applyOptimisticSettlement(savedApt, usedPaymentMode, paymentSplit, sett
 
 async function navigate(page, { forceRefresh = true } = {}) {
   const valid = NAV.some(([k]) => k === page) ? page : 'dashboard';
+  if (state.page === 'reports' && valid !== 'reports') {
+    lockReports();
+  }
   const seq = ++_navSeq;
   state.page = valid;
   history.replaceState(null, '', '#' + valid);
 
-  if (valid === 'reports' && _syncState.reportsCache[state.reportPeriod]) {
+  if (valid === 'reports' && state.reportsUnlocked && _syncState.reportsCache[state.reportPeriod]) {
     state.reports = _syncState.reportsCache[state.reportPeriod];
   } else if (valid === 'stylists' && _syncState.stylistsCache[state.stylistPeriod]) {
     state.stylists = _syncState.stylistsCache[state.stylistPeriod];
@@ -2048,7 +2152,26 @@ document.addEventListener('click', async (e) => {
     }
     return;
   }
+  if (action === 'toggle-reports-pin-vis') {
+    const inp = $('#reportsPinInput');
+    if (inp) {
+      state.reportsPinVisible = !state.reportsPinVisible;
+      inp.type = state.reportsPinVisible ? 'text' : 'password';
+      target.setAttribute('aria-pressed', state.reportsPinVisible ? 'true' : 'false');
+      target.setAttribute('aria-label', state.reportsPinVisible ? 'Hide PIN' : 'Show PIN');
+      target.innerHTML = state.reportsPinVisible ? EYE_OFF_SVG : EYE_ON_SVG;
+      inp.focus();
+    }
+    return;
+  }
+  if (action === 'lock-reports') {
+    lockReports();
+    render(true);
+    toast('Reports locked');
+    return;
+  }
   if (action === 'report-period') {
+    if (!state.reportsUnlocked) return;
     state.reportPeriod = val;
     const cached = _syncState.reportsCache[val];
     if (cached) {
@@ -2060,16 +2183,23 @@ document.addEventListener('click', async (e) => {
     try {
       const fresh = await api.getReports(val);
       _syncState.reportsCache[val] = fresh;
-      if (state.page === 'reports' && state.reportPeriod === val) {
+      if (state.page === 'reports' && state.reportsUnlocked && state.reportPeriod === val) {
         state.reports = fresh;
         render(!cached);
       }
     } catch (err) {
-      toast(err.message);
+      if (err.code === 'PIN_REQUIRED' || err.code === 'RATE_LIMITED') {
+        lockReports();
+        state.reportsPinError = err.message || 'Owner PIN required';
+        render(false);
+      } else {
+        toast(err.message);
+      }
     }
     return;
   }
   if (action === 'export-gst-csv') {
+    if (!state.reportsUnlocked) return;
     try {
       const csv = await api.exportGstCsv(state.reportPeriod);
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -2083,7 +2213,13 @@ document.addEventListener('click', async (e) => {
       URL.revokeObjectURL(url);
       toast('GST Audit CSV exported');
     } catch (err) {
-      toast(err.message);
+      if (err.code === 'PIN_REQUIRED' || err.code === 'RATE_LIMITED') {
+        lockReports();
+        state.reportsPinError = err.message || 'Owner PIN required';
+        render(false);
+      } else {
+        toast(err.message);
+      }
     }
     return;
   }
@@ -2100,18 +2236,8 @@ document.addEventListener('click', async (e) => {
       toast('Keep at least one active stylist in the roster');
       return;
     }
-    try {
-      await api.deleteStylist(id);
-      invalidateClientCaches();
-      state.dashboard = null;
-      state.stylists = await api.getStylists(state.stylistPeriod);
-      _syncState.stylistsCache[state.stylistPeriod] = state.stylists;
-      syncStylistSelection();
-      render(false);
-      toast('Stylist archived');
-    } catch (err) {
-      toast(err.message);
-    }
+    const st = state.stylists.find(x => x.id === id);
+    openArchiveModal({ kind: 'stylist', id, label: st?.name || 'Stylist' });
     return;
   }
   if (action === 'open-add-service') { openServiceModal(null); return; }
@@ -2121,15 +2247,8 @@ document.addEventListener('click', async (e) => {
     return;
   }
   if (action === 'delete-service') {
-    try {
-      await api.deleteService(id);
-      invalidateClientCaches();
-      state.services = await api.getServices();
-      render(false);
-      toast('Service archived');
-    } catch (err) {
-      toast(err.message);
-    }
+    const srv = state.services.find(x => x.id === id);
+    openArchiveModal({ kind: 'service', id, label: srv?.name || 'Service' });
     return;
   }
 
@@ -2153,13 +2272,6 @@ document.addEventListener('click', async (e) => {
     return;
   }
 
-  // Settings PIN & Reset
-  if (action === 'save-session-pin') {
-    const pinVal = $('#unlockPin')?.value || '';
-    setSessionOwnerPin(pinVal);
-    toast(pinVal ? 'Session Owner PIN applied' : 'Session PIN cleared');
-    return;
-  }
   if (action === 'open-reset-modal') {
     openOverlay('confirmModal');
   }
@@ -2296,6 +2408,17 @@ document.addEventListener('input', async (e) => {
     el.setAttribute('aria-invalid', 'false');
     const errEl = $(`#${el.id}-err`);
     if (errEl) errEl.classList.remove('show');
+    return;
+  }
+
+  // Owner PIN inputs: digits only (max 6)
+  if (el.id === 'reportsPinInput' || el.id === 'setupPin1' || el.id === 'setupPin2' || el.id === 'setPin' || el.id === 'settingsCurrentPin' || el.id === 'archivePin' || el.id === 'voidPin') {
+    el.value = el.value.replace(/\D/g, '').slice(0, 6);
+    if (el.id === 'reportsPinInput' || el.id === 'setupPin1' || el.id === 'setupPin2') {
+      state.reportsPinError = '';
+      const errBox = $('#reportsPinError');
+      if (errBox && errBox.style.display !== 'none') errBox.style.display = 'none';
+    }
   }
 });
 
@@ -2319,16 +2442,66 @@ document.addEventListener('submit', async (e) => {
       opening_cash: fd.get('opening_cash')
     };
     const newPin = String(fd.get('owner_pin') || '').trim();
+    const currentPin = String(fd.get('current_owner_pin') || '').trim();
+    if (newPin && !/^\d{6}$/.test(newPin)) {
+      toast('New Owner PIN must be exactly 6 digits');
+      $('#setPin')?.focus();
+      return;
+    }
+    if (state.settings?.has_owner_pin && !currentPin) {
+      toast('Enter your current Owner PIN to save changes');
+      $('#settingsCurrentPin')?.focus();
+      return;
+    }
     if (newPin) payload.owner_pin = newPin;
     try {
-      state.settings = await api.updateSettings(payload);
-      if (newPin) setSessionOwnerPin(newPin);
+      state.settings = await api.updateSettings(payload, currentPin);
       invalidateClientCaches();
       render(false);
       toast('Salon settings saved cleanly');
     } catch (err) {
-      toast(err.message);
+      if (err.code === 'PIN_REQUIRED') {
+        toast('Invalid current Owner PIN');
+        $('#settingsCurrentPin')?.focus();
+      } else {
+        toast(err.message);
+      }
     }
+  }
+
+  if (form.id === 'archiveRecordForm') {
+    e.preventDefault();
+    const kind = form.dataset.kind;
+    const id = form.dataset.id;
+    const pin = ($('#archivePin')?.value || '').trim();
+    try {
+      if (kind === 'stylist') {
+        await api.deleteStylist(id, pin);
+        invalidateClientCaches();
+        state.dashboard = null;
+        closeOverlay('formModal');
+        state.stylists = await api.getStylists(state.stylistPeriod);
+        _syncState.stylistsCache[state.stylistPeriod] = state.stylists;
+        syncStylistSelection();
+        render(false);
+        toast('Stylist archived');
+      } else {
+        await api.deleteService(id, pin);
+        invalidateClientCaches();
+        closeOverlay('formModal');
+        state.services = await api.getServices();
+        render(false);
+        toast('Service archived');
+      }
+    } catch (err) {
+      if (err.code === 'PIN_REQUIRED') {
+        toast('Invalid Owner PIN');
+        $('#archivePin')?.focus();
+      } else {
+        toast(err.message);
+      }
+    }
+    return;
   }
 
   if (form.id === 'stylistForm') {
@@ -2441,6 +2614,80 @@ document.addEventListener('submit', async (e) => {
     }
   }
 
+  if (form.id === 'reportsUnlockForm') {
+    e.preventDefault();
+    const pin = ($('#reportsPinInput')?.value || '').trim();
+    if (!/^\d{4,6}$/.test(pin)) {
+      state.reportsPinError = 'Enter your numeric Owner PIN.';
+      const errBox = $('#reportsPinError');
+      if (errBox) { errBox.textContent = state.reportsPinError; errBox.style.display = 'block'; }
+      $('#reportsPinInput')?.focus();
+      return;
+    }
+    state.reportsUnlockBusy = true;
+    state.reportsPinError = '';
+    render(false);
+    try {
+      await api.verifyOwnerPin(pin);
+      setSessionOwnerPin(pin);
+      state.reportsUnlocked = true;
+      const reports = await api.getReports(state.reportPeriod);
+      state.reports = reports;
+      _syncState.reportsCache[state.reportPeriod] = reports;
+      state.reportsUnlockBusy = false;
+      render(true);
+    } catch (err) {
+      setSessionOwnerPin('');
+      state.reportsUnlocked = false;
+      state.reportsUnlockBusy = false;
+      state.reportsPinError = err.message || 'Invalid Owner PIN';
+      render(false);
+      $('#reportsPinInput')?.focus();
+    }
+    return;
+  }
+
+  if (form.id === 'reportsSetupPinForm') {
+    e.preventDefault();
+    const p1 = ($('#setupPin1')?.value || '').trim();
+    const p2 = ($('#setupPin2')?.value || '').trim();
+    if (!/^\d{6}$/.test(p1)) {
+      state.reportsPinError = 'Owner PIN must be exactly 6 digits.';
+      const errBox = $('#reportsPinError');
+      if (errBox) { errBox.textContent = state.reportsPinError; errBox.style.display = 'block'; }
+      $('#setupPin1')?.focus();
+      return;
+    }
+    if (p1 !== p2) {
+      state.reportsPinError = 'PIN confirmation does not match.';
+      const errBox = $('#reportsPinError');
+      if (errBox) { errBox.textContent = state.reportsPinError; errBox.style.display = 'block'; }
+      $('#setupPin2')?.focus();
+      return;
+    }
+    state.reportsUnlockBusy = true;
+    state.reportsPinError = '';
+    render(false);
+    try {
+      state.settings = await api.updateSettings({ owner_pin: p1 });
+      setSessionOwnerPin(p1);
+      state.reportsUnlocked = true;
+      const reports = await api.getReports(state.reportPeriod);
+      state.reports = reports;
+      _syncState.reportsCache[state.reportPeriod] = reports;
+      state.reportsUnlockBusy = false;
+      render(true);
+      toast('6-digit Owner PIN saved and Reports unlocked');
+    } catch (err) {
+      setSessionOwnerPin('');
+      state.reportsUnlocked = false;
+      state.reportsUnlockBusy = false;
+      state.reportsPinError = err.message || 'Could not save Owner PIN';
+      render(false);
+    }
+    return;
+  }
+
   if (form.id === 'voidBillForm') {
     e.preventDefault();
     const aptId = form.dataset.id;
@@ -2450,6 +2697,7 @@ document.addEventListener('submit', async (e) => {
     }
     try {
       await api.deleteAppointment(aptId);
+      if (!state.reportsUnlocked) setSessionOwnerPin('');
       invalidateClientCaches();
       closeOverlay('formModal');
       closeOverlay('receiptModal');
@@ -2546,6 +2794,7 @@ function checkAuthAndPrompt() {
 }
 
 window.addEventListener('salondesk:auth-required', () => {
+  lockReports();
   invalidateClientCaches();
   _prewarmed = false;
   openLoginModal();
@@ -2627,13 +2876,13 @@ if (loginForm) {
 document.addEventListener('click', (e) => {
   if (e.target.closest('#btnLogout')) {
     clearSalonSession();
+    lockReports();
     invalidateClientCaches();
     _prewarmed = false;
     state.dashboard = null;
     state.clients = [];
     state.services = [];
     state.stylists = [];
-    state.reports = null;
     state.campaigns = [];
     _syncState.campaignsLoaded = false;
     toast('Logged out from salon');

@@ -113,7 +113,7 @@ async function runAudit() {
 
   // --- TEST 4: 7-Day Comprehensive Business Reports ---
   console.log('\n▶ Test 4: 7-Day Business Reports & Financial Totals...');
-  const repWeek = await fetchJson('/api/reports?period=week', { headers: authHeaders });
+  const repWeek = await fetchJson('/api/reports?period=week', { headers: { ...authHeaders, 'X-Owner-Pin': OWNER_PIN } });
   assert(repWeek.status === 200, `Reports failed with status ${repWeek.status}`);
   console.log(`  ✅ Reports response latency: ${repWeek.latency}ms`);
   auditReport.latencies['reports_week'] = repWeek.latency;
@@ -203,7 +203,7 @@ async function runAudit() {
 
   // --- TEST 7: GST Audit CSV Generation & Line-by-Line Reconciliation ---
   console.log('\n▶ Test 7: GST Compliance Audit & Line-by-Line CSV Reconciliation...');
-  const csvRes = await fetchJson('/api/reports/gst-csv?period=week', { headers: authHeaders });
+  const csvRes = await fetchJson('/api/reports/gst-csv?period=week', { headers: { ...authHeaders, 'X-Owner-Pin': OWNER_PIN } });
   assert(csvRes.status === 200, `GST CSV failed with status ${csvRes.status}`);
   console.log(`  ✅ GST CSV download latency: ${csvRes.latency}ms`);
   auditReport.latencies['gst_csv'] = csvRes.latency;

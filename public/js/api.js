@@ -3,17 +3,12 @@ let salonTokenCache = '';
 let currentSalonId = 'genzee';
 
 try {
-  ownerPinCache = sessionStorage.getItem('jawed-owner-pin') || '';
   salonTokenCache = localStorage.getItem('salon-auth-token') || '';
   currentSalonId = localStorage.getItem('salon-id') || 'genzee';
 } catch (_) {}
 
 export function setSessionOwnerPin(pin) {
   ownerPinCache = String(pin || '').trim();
-  try {
-    if (ownerPinCache) sessionStorage.setItem('jawed-owner-pin', ownerPinCache);
-    else sessionStorage.removeItem('jawed-owner-pin');
-  } catch (_) {}
 }
 
 export function getSessionOwnerPin() {
@@ -104,6 +99,7 @@ async function request(path, options = {}) {
 
 async function requestText(path) {
   const headers = {};
+  if (ownerPinCache) headers['X-Owner-Pin'] = ownerPinCache;
   if (currentSalonId) headers['X-Salon-Id'] = currentSalonId;
   if (salonTokenCache) headers['Authorization'] = `Bearer ${salonTokenCache}`;
   const res = await fetch(path, { headers });
@@ -128,6 +124,7 @@ async function requestText(path) {
 export const api = {
   // Auth
   login: (username, password) => request('/api/auth/login', { method: 'POST', body: { username, password } }),
+  verifyOwnerPin: (pin) => request('/api/auth/verify-pin', { method: 'POST', body: { pin: String(pin || '').trim() } }),
   getMe: () => request('/api/auth/me'),
   logout: () => clearSalonSession(),
 
@@ -135,12 +132,18 @@ export const api = {
   getServices: (all = false) => request(`/api/services${all ? '?all=1' : ''}`),
   createService: (body) => request('/api/services', { method: 'POST', body }),
   updateService: (id, body) => request(`/api/services/${encodeURIComponent(id)}`, { method: 'PATCH', body }),
-  deleteService: (id) => request(`/api/services/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  deleteService: (id, ownerPin) => request(`/api/services/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: ownerPin ? { 'X-Owner-Pin': ownerPin } : {}
+  }),
 
   getStylists: (period = 'month') => request(`/api/stylists?period=${encodeURIComponent(period)}`),
   createStylist: (body) => request('/api/stylists', { method: 'POST', body }),
   updateStylist: (id, body) => request(`/api/stylists/${encodeURIComponent(id)}`, { method: 'PATCH', body }),
-  deleteStylist: (id) => request(`/api/stylists/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  deleteStylist: (id, ownerPin) => request(`/api/stylists/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: ownerPin ? { 'X-Owner-Pin': ownerPin } : {}
+  }),
 
   getClients: (params = {}) => {
     const sp = new URLSearchParams();
@@ -171,6 +174,10 @@ export const api = {
   getReports: (period = 'month') => request(`/api/reports?period=${encodeURIComponent(period)}`),
   exportGstCsv: (period = 'month') => requestText(`/api/reports/gst-csv?period=${encodeURIComponent(period)}`),
   getSettings: () => request('/api/settings'),
-  updateSettings: (body) => request('/api/settings', { method: 'PATCH', body }),
+  updateSettings: (body, ownerPin) => request('/api/settings', {
+    method: 'PATCH',
+    body,
+    headers: ownerPin ? { 'X-Owner-Pin': ownerPin } : {}
+  }),
   resetDatabase: () => request('/api/reset', { method: 'POST' })
 };
