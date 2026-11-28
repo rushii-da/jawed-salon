@@ -995,50 +995,52 @@ function renderReportsView() {
     const lockIcon = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>';
 
     return headerBar('Revenue & GST Audit Ledger', 'Protected Owner Analytics · 6-digit PIN required', '') + `
-    <div class="card login-card" style="max-width:440px;margin:20px auto">
-      <div class="login-head">
-        <div class="login-brand-row">
-          <div class="login-mark" aria-hidden="true">${lockIcon}</div>
-          ${chip(hasPin ? 'Reports Locked' : 'First-Time Setup', hasPin ? 'amb' : 'vio')}
+    <div class="pin-gate-wrap">
+      <div class="card pin-gate-card">
+        <div class="login-head">
+          <div class="login-brand-row">
+            <div class="login-mark" aria-hidden="true">${lockIcon}</div>
+            ${chip(hasPin ? 'Reports Locked' : 'First-Time Setup', hasPin ? 'amb' : 'vio')}
+          </div>
+          <h2 class="login-title">${hasPin ? 'Enter 6-Digit Owner PIN' : 'Create 6-Digit Owner PIN'}</h2>
+          <p class="login-sub">${hasPin
+            ? 'Revenue ledgers, cash drawer totals, and GST CSV exports require the owner PIN. Reports auto-lock when you switch tabs.'
+            : 'Set a 6-digit numeric PIN once to protect Revenue Reports, GST exports, Settings, and Void actions.'}</p>
         </div>
-        <h2 class="login-title">${hasPin ? 'Enter 6-Digit Owner PIN' : 'Create 6-Digit Owner PIN'}</h2>
-        <p class="login-sub">${hasPin
-          ? 'Revenue ledgers, cash drawer totals, and GST CSV exports require the owner PIN. Reports auto-lock when you switch tabs.'
-          : 'Set a 6-digit numeric PIN once to protect Revenue Reports, GST exports, Settings, and Void actions.'}</p>
-      </div>
-      ${hasPin ? `
-        <form id="reportsUnlockForm" class="login-form" autocomplete="off" novalidate>
-          <div>
-            <label class="fl" for="reportsPinInput">Owner Security PIN</label>
-            <div class="pass-wrap">
-              <input type="${state.reportsPinVisible ? 'text' : 'password'}" id="reportsPinInput" class="in pass-in" inputmode="numeric" maxlength="6" placeholder="Enter 6-digit PIN" required autocomplete="new-password" aria-describedby="reportsPinError">
-              <button type="button" class="pass-toggle" data-action="toggle-reports-pin-vis" aria-label="${state.reportsPinVisible ? 'Hide PIN' : 'Show PIN'}" aria-pressed="${state.reportsPinVisible ? 'true' : 'false'}">
-                ${state.reportsPinVisible ? EYE_OFF_SVG : EYE_ON_SVG}
-              </button>
+        ${hasPin ? `
+          <form id="reportsUnlockForm" class="login-form" autocomplete="off" novalidate>
+            <div>
+              <label class="fl" for="reportsPinInput">Owner Security PIN</label>
+              <div class="pass-wrap">
+                <input type="${state.reportsPinVisible ? 'text' : 'password'}" id="reportsPinInput" class="in pass-in" inputmode="numeric" maxlength="6" placeholder="Enter 6-digit PIN" required autocomplete="new-password" aria-describedby="reportsPinError">
+                <button type="button" class="pass-toggle" data-action="toggle-reports-pin-vis" aria-label="${state.reportsPinVisible ? 'Hide PIN' : 'Show PIN'}" aria-pressed="${state.reportsPinVisible ? 'true' : 'false'}">
+                  ${state.reportsPinVisible ? EYE_OFF_SVG : EYE_ON_SVG}
+                </button>
+              </div>
             </div>
-          </div>
-          <div id="reportsPinError" class="alert-box" role="alert" style="${errStyle}">${escapeHtml(errText)}</div>
-          <button type="submit" class="btn l login-btn" id="btnUnlockReports" ${state.reportsUnlockBusy ? 'disabled' : ''}>
-            ${state.reportsUnlockBusy ? 'Verifying…' : 'Unlock Reports'}
-          </button>
-        </form>
-      ` : `
-        <form id="reportsSetupPinForm" class="login-form" autocomplete="off" novalidate>
-          <div>
-            <label class="fl" for="setupPin1">New 6-Digit PIN</label>
-            <input type="password" id="setupPin1" class="in" inputmode="numeric" maxlength="6" pattern="\\d{6}" placeholder="Enter 6 digits" required autocomplete="new-password" aria-describedby="reportsPinError">
-          </div>
-          <div>
-            <label class="fl" for="setupPin2">Confirm 6-Digit PIN</label>
-            <input type="password" id="setupPin2" class="in" inputmode="numeric" maxlength="6" pattern="\\d{6}" placeholder="Re-enter 6 digits" required autocomplete="new-password" aria-describedby="reportsPinError">
-          </div>
-          <div id="reportsPinError" class="alert-box" role="alert" style="${errStyle}">${escapeHtml(errText)}</div>
-          <button type="submit" class="btn l login-btn" id="btnSetupReportsPin" ${state.reportsUnlockBusy ? 'disabled' : ''}>
-            ${state.reportsUnlockBusy ? 'Saving PIN…' : 'Set 6-Digit PIN & Open Reports'}
-          </button>
-        </form>
-      `}
-      <p class="login-foot">Auto-locks on tab change or page refresh</p>
+            <div id="reportsPinError" class="alert-box" role="alert" style="${errStyle}">${escapeHtml(errText)}</div>
+            <button type="submit" class="btn l login-btn" id="btnUnlockReports" ${state.reportsUnlockBusy ? 'disabled' : ''}>
+              ${state.reportsUnlockBusy ? 'Verifying…' : 'Unlock Reports'}
+            </button>
+          </form>
+        ` : `
+          <form id="reportsSetupPinForm" class="login-form" autocomplete="off" novalidate>
+            <div>
+              <label class="fl" for="setupPin1">New 6-Digit PIN</label>
+              <input type="password" id="setupPin1" class="in" inputmode="numeric" maxlength="6" pattern="\\d{6}" placeholder="Enter 6 digits" required autocomplete="new-password" aria-describedby="reportsPinError">
+            </div>
+            <div>
+              <label class="fl" for="setupPin2">Confirm 6-Digit PIN</label>
+              <input type="password" id="setupPin2" class="in" inputmode="numeric" maxlength="6" pattern="\\d{6}" placeholder="Re-enter 6 digits" required autocomplete="new-password" aria-describedby="reportsPinError">
+            </div>
+            <div id="reportsPinError" class="alert-box" role="alert" style="${errStyle}">${escapeHtml(errText)}</div>
+            <button type="submit" class="btn l login-btn" id="btnSetupReportsPin" ${state.reportsUnlockBusy ? 'disabled' : ''}>
+              ${state.reportsUnlockBusy ? 'Saving PIN…' : 'Set 6-Digit PIN & Open Reports'}
+            </button>
+          </form>
+        `}
+        <p class="login-foot">Auto-locks on tab change or page refresh</p>
+      </div>
     </div>`;
   }
 

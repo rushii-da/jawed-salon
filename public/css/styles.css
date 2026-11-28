@@ -1078,6 +1078,18 @@ textarea.in { resize: vertical; min-height: 76px; }
   max-width: 420px;
   padding: 30px 28px 26px;
 }
+.pin-gate-wrap {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 28px 0 12px;
+}
+.pin-gate-card {
+  container-type: normal;
+  width: min(100%, 440px);
+  padding: 30px 28px 26px;
+}
 .login-head { margin-bottom: 20px; }
 .login-brand-row {
   display: flex;

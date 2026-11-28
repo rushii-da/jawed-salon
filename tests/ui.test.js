@@ -52,6 +52,7 @@ describe('Jawed Salon OS — UI Integrity, Accessibility & XSS Safety', () => {
     assert.ok(apiJs.includes('/api/reports'), 'Must load reports from SQLite API');
     assert.ok(apiJs.includes('/api/auth/verify-pin') && apiJs.includes("headers['X-Owner-Pin'] = ownerPinCache"), 'API client must support verifyOwnerPin and pass X-Owner-Pin for CSV exports');
     assert.ok(appJs.includes('reportsUnlockForm') && appJs.includes('reportsSetupPinForm') && appJs.includes('function lockReports(') && appJs.includes('lock-reports'), 'Reports view must require 6-digit PIN and auto-lock when leaving tab');
+    assert.ok(css.includes('.pin-gate-card') && css.includes('container-type: normal') && css.includes('width: min(100%, 440px)'), 'Reports PIN card must disable inline-size containment collapse and define explicit width');
   });
 
   it('implements frosted glassmorphism tokens and reduced-motion-safe purposeful animations', () => {
